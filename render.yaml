@@ -3,7 +3,6 @@ services:
     name: culttrack-backend
     runtime: docker
     rootDir: backend
-    dockerfilePath: ./Dockerfile.render
     envVars:
       - key: DATABASE_URL
         sync: false
