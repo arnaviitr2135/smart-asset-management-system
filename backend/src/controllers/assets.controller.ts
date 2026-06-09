@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { logAudit } from '../services/notification.service';
 
 const prisma = new PrismaClient();
+const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
 
 export async function getAssets(req: AuthenticatedRequest, res: Response) {
   try {
@@ -89,7 +90,7 @@ export async function createAsset(req: AuthenticatedRequest, res: Response) {
     });
 
     // Generate dynamic QR Code simulator link on the frontend using the created ID
-    const qrCodeUrl = `http://localhost:5173/assets/scan-simulate?id=${asset.id}`;
+    const qrCodeUrl = `${frontendUrl}/assets/scan-simulate?id=${asset.id}`;
     const updatedAsset = await prisma.asset.update({
       where: { id: asset.id },
       data: { qrCodeUrl },

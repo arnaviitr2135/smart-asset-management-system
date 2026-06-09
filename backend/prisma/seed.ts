@@ -2,6 +2,7 @@ import { PrismaClient, Role, AssetCategory, AssetStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
 
 async function main() {
   console.log('Seeding database...');
@@ -103,14 +104,14 @@ async function main() {
     const created = await prisma.asset.create({
       data: {
         ...asset,
-        qrCodeUrl: `http://localhost:5173/assets/scan-simulate?id=TEMPLATE_ID`, // Will placeholder/override in code
+        qrCodeUrl: `${frontendUrl}/assets/scan-simulate?id=TEMPLATE_ID`, // Will placeholder/override in code
       },
     });
     // Update the QR URL with the actual database ID
     await prisma.asset.update({
       where: { id: created.id },
       data: {
-        qrCodeUrl: `http://localhost:5173/assets/scan-simulate?id=${created.id}`,
+        qrCodeUrl: `${frontendUrl}/assets/scan-simulate?id=${created.id}`,
       },
     });
   }
