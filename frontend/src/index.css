@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    background: #090a0f;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-width: 320px;
+    background:
+      radial-gradient(circle at 10% 0%, rgba(20, 184, 166, 0.12), transparent 28rem),
+      radial-gradient(circle at 95% 12%, rgba(139, 92, 246, 0.14), transparent 30rem),
+      linear-gradient(145deg, #090a0f 0%, #0f1015 45%, #11151b 100%);
+    color: #f6f6f7;
+    text-rendering: geometricPrecision;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Outfit', 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+
+  .glass-panel {
+    background: linear-gradient(180deg, rgba(28, 31, 40, 0.78), rgba(17, 19, 26, 0.68));
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  }
+
+  .glass-panel-brand {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.13), rgba(20, 184, 166, 0.08));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(167, 139, 250, 0.18);
+    box-shadow: 0 18px 55px rgba(20, 184, 166, 0.08);
+  }
+
+  .glass-input {
+    background: rgba(9, 10, 15, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: #f6f6f7;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-input::placeholder {
+    color: #797d8b;
+  }
+
+  .glass-input:focus {
+    outline: none;
+    border-color: rgba(45, 212, 191, 0.48);
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.12), 0 12px 30px rgba(0, 0, 0, 0.18);
+    background: rgba(13, 15, 22, 0.92);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #14b8a6 0%, #6366f1 100%);
+    box-shadow: 0 12px 28px rgba(20, 184, 166, 0.22);
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 36px rgba(99, 102, 241, 0.26);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .surface-card {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .surface-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 34%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .surface-card:hover::before {
+    opacity: 1;
+  }
+
+  .page-kicker {
+    color: #2dd4bf;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .metric-pill {
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    color: #c5c7cb;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0f1015;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #2b2e3a;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #14b8a6;
+  }
+
+  /* Neon Glow Utilities */
+  .neon-text-purple {
+    text-shadow: 0 0 8px rgba(139, 92, 246, 0.4), 0 0 20px rgba(139, 92, 246, 0.2);
+  }
+
+  .neon-text-green {
+    text-shadow: 0 0 8px rgba(34, 197, 94, 0.4), 0 0 20px rgba(34, 197, 94, 0.2);
+  }
+
+  .neon-border-green {
+    border-color: rgba(34, 197, 94, 0.4);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.2);
+  }
+
+  .neon-border-purple {
+    border-color: rgba(139, 92, 246, 0.4);
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.2);
+  }
+
+  /* Grid layouts */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+  }
+}
