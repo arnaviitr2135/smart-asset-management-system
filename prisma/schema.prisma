@@ -1,0 +1,156 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum AssetCategory {
+  CAMERA
+  LIGHTING
+  AUDIO
+  COSTUME
+  PROP
+  RECORDING
+  INFRA
+}
+
+enum AssetStatus {
+  ACTIVE
+  MAINTENANCE
+  DAMAGED
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum AllocationStatus {
+  ISSUED
+  RETURNED
+  OVERDUE
+}
+
+enum Condition {
+  EXCELLENT
+  GOOD
+  DAMAGED
+}
+
+model User {
+  id                  String              @id @default(uuid())
+  email               String              @unique
+  passwordHash        String
+  fullName            String
+  role                Role                @default(USER)
+  createdAt           DateTime            @default(now())
+  bookings            Booking[]
+  allocations         Allocation[]        @relation("UserAllocations")
+  issuedAllocations   Allocation[]        @relation("AdminIssuedAllocations")
+  receivedReturns     Return[]            @relation("AdminReceivedReturns")
+  healthReports       AssetHealthReport[]
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+}
+
+model Asset {
+  id                String              @id @default(uuid())
+  name              String
+  category          AssetCategory
+  description       String
+  quantityAvailable Int
+  totalQuantity     Int
+  status            AssetStatus         @default(ACTIVE)
+  qrCodeUrl         String?
+  createdAt         DateTime            @default(now())
+  bookings          Booking[]
+  allocations       Allocation[]
+  healthReports     AssetHealthReport[]
+}
+
+model Booking {
+  id         String        @id @default(uuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetId    String
+  asset      Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  quantity   Int
+  startDate  DateTime
+  endDate    DateTime
+  purpose    String
+  status     BookingStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+  allocation Allocation?
+}
+
+model Allocation {
+  id            String            @id @default(uuid())
+  bookingId     String            @unique
+  booking       Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  assetId       String
+  asset         Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User              @relation("UserAllocations", fields: [userId], references: [id], onDelete: Cascade)
+  issuedById    String
+  issuedBy      User              @relation("AdminIssuedAllocations", fields: [issuedById], references: [id])
+  quantity      Int
+  dueDate       DateTime
+  status        AllocationStatus  @default(ISSUED)
+  issuedAt      DateTime          @default(now())
+  returnRecord  Return?
+  healthReports AssetHealthReport[]
+}
+
+model Return {
+  id             String      @id @default(uuid())
+  allocationId   String      @unique
+  allocation     Allocation  @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  receivedById   String
+  receivedBy     User        @relation("AdminReceivedReturns", fields: [receivedById], references: [id])
+  returnedAt     DateTime    @default(now())
+  conditionOnReturn Condition @default(GOOD)
+  notes          String?
+}
+
+model AssetHealthReport {
+  id           String      @id @default(uuid())
+  assetId      String
+  asset        Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  reportedById String
+  reportedBy   User        @relation(fields: [reportedById], references: [id], onDelete: Cascade)
+  allocationId String?
+  allocation   Allocation? @relation(fields: [allocationId], references: [id], onDelete: SetNull)
+  condition    Condition   @default(GOOD)
+  notes        String
+  createdAt    DateTime    @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  details   String
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
