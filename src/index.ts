@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
-
+ 
 dotenv.config();
 
 import authRouter from './routes/auth.route';
