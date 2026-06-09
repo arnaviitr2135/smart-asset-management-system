@@ -6,6 +6,13 @@ It features an embedded **AI-driven shortage predictor** that uses historical bo
 
 ---
 
+## Deployed App
+- **Live Frontend:** [https://frontend-seven-lyart-83.vercel.app](https://frontend-seven-lyart-83.vercel.app)
+- **Backend API:** [https://smart-asset-management-and-resource-opww.onrender.com](https://smart-asset-management-and-resource-opww.onrender.com)
+- **Backend Health Check:** [https://smart-asset-management-and-resource-opww.onrender.com/healthz](https://smart-asset-management-and-resource-opww.onrender.com/healthz)
+
+---
+
 ## 🛠️ Technology Stack
 - **Frontend:** React, Vite, TypeScript, Tailwind CSS, Recharts, Lucide Icons
 - **Backend:** Node.js, Express, TypeScript, Prisma ORM
