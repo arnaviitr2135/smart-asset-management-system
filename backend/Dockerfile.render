@@ -2,7 +2,7 @@ FROM node:20-bookworm-slim
 
 WORKDIR /usr/src/app
 
-COPY backend/package*.json ./
+COPY package*.json ./
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
@@ -10,10 +10,10 @@ RUN apt-get update \
 
 RUN npm ci
 
-COPY backend/prisma ./prisma/
+COPY prisma ./prisma/
 RUN npx prisma generate
 
-COPY backend/ ./
+COPY . .
 
 RUN npm run build
 
