@@ -130,8 +130,14 @@ export async function forgotPassword(req: AuthenticatedRequest, res: Response) {
         },
       });
 
-      const resetUrl = `${FRONTEND_URL}?resetToken=${rawToken}`;
+      const requestOrigin = typeof req.headers.origin === 'string'
+        ? req.headers.origin.replace(/\/$/, '')
+        : FRONTEND_URL;
+      const resetUrl = `${requestOrigin}?resetToken=${rawToken}`;
+      console.log(`[Password Reset] Reset email queued for user ${user.id} at ${user.email}`);
       void sendPasswordResetEmail(user.email, user.fullName, resetUrl);
+    } else {
+      console.log(`[Password Reset] Request received for non-registered email: ${email}`);
     }
 
     res.json({
