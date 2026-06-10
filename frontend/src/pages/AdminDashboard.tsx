@@ -47,9 +47,11 @@ const AdminDashboard: React.FC = () => {
   const [healthNotes, setHealthNotes] = useState('');
   const [healthError, setHealthError] = useState('');
 
-  const refreshAllData = async () => {
+  const refreshAllData = async (showSpinner = true) => {
     try {
-      setLoading(true);
+      if (showSpinner) {
+        setLoading(true);
+      }
       const [bookingsData, assetsData, allocationsData, healthData, auditData] = await Promise.all([
         apiFetch('/api/v1/bookings'),
         apiFetch('/api/v1/assets'),
@@ -71,13 +73,15 @@ const AdminDashboard: React.FC = () => {
       setHealthReports([]);
       setAuditLogs([]);
     } finally {
-      setLoading(false);
+      if (showSpinner) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     refreshAllData();
-  }, [activeSubTab]);
+  }, []);
 
   // Render QR Code canvas
   useEffect(() => {
@@ -92,7 +96,7 @@ const AdminDashboard: React.FC = () => {
   const handleApproveBooking = async (id: string) => {
     try {
       await apiFetch(`/api/v1/bookings/${id}/approve`, { method: 'PUT' });
-      refreshAllData();
+      void refreshAllData(false);
     } catch (err: any) {
       alert(err.message || 'Approval failed');
     }
@@ -101,7 +105,7 @@ const AdminDashboard: React.FC = () => {
   const handleRejectBooking = async (id: string) => {
     try {
       await apiFetch(`/api/v1/bookings/${id}/reject`, { method: 'PUT' });
-      refreshAllData();
+      void refreshAllData(false);
     } catch (err: any) {
       alert(err.message || 'Rejection failed');
     }
@@ -113,7 +117,7 @@ const AdminDashboard: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({ bookingId }),
       });
-      refreshAllData();
+      void refreshAllData(false);
     } catch (err: any) {
       alert(err.message || 'Failed to issue asset');
     }
@@ -132,7 +136,7 @@ const AdminDashboard: React.FC = () => {
       });
       setSelectedAllocationForReturn(null);
       setReturnNotes('');
-      refreshAllData();
+      void refreshAllData(false);
     } catch (err: any) {
       alert(err.message || 'Return failed');
     }
@@ -179,7 +183,7 @@ const AdminDashboard: React.FC = () => {
       });
 
       setShowAssetModal(false);
-      refreshAllData();
+      void refreshAllData(false);
     } catch (err: any) {
       setAssetFormError(err.message || 'Asset operation failed');
     }
@@ -189,7 +193,7 @@ const AdminDashboard: React.FC = () => {
     if (!confirm('Are you sure you want to permanently delete this asset?')) return;
     try {
       await apiFetch(`/api/v1/assets/${id}`, { method: 'DELETE' });
-      refreshAllData();
+      void refreshAllData(false);
     } catch (err: any) {
       alert(err.message || 'Failed to delete asset');
     }
@@ -225,7 +229,7 @@ const AdminDashboard: React.FC = () => {
 
       setHealthNotes('');
       setHealthAssetId('');
-      refreshAllData();
+      void refreshAllData(false);
     } catch (err: any) {
       setHealthError(err.message || 'Failed to create health report');
     }
@@ -240,7 +244,7 @@ const AdminDashboard: React.FC = () => {
           <p className="text-sm text-dark-400">Manage bookings, issue resources, scan QR codes, and review audits.</p>
         </div>
         <button
-          onClick={refreshAllData}
+          onClick={() => refreshAllData()}
           className="p-2 rounded-lg bg-dark-900 border border-dark-800 text-dark-300 hover:text-white transition-colors"
         >
           <RefreshCw className="w-4 h-4" />

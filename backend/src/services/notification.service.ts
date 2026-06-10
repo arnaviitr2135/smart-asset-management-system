@@ -155,7 +155,7 @@ export async function createNotification(
     });
 
     if (user?.email) {
-      await sendEmail(user.email, user.fullName, title, message, badge);
+      void sendEmail(user.email, user.fullName, title, message, badge);
     }
 
     return notification;
@@ -179,12 +179,10 @@ export async function notifyAdmins(
 
     await Promise.all(
       admins.map(async (admin) => {
-        // In-app
         await prisma.notification.create({
           data: { userId: admin.id, title, message, type },
         });
-        // Email
-        await sendEmail(admin.email, admin.fullName, title, message, badge);
+        void sendEmail(admin.email, admin.fullName, title, message, badge);
       })
     );
 
