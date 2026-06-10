@@ -15,12 +15,13 @@ interface AuthContextType {
   login: (token: string, user: User) => void;
   logout: () => void;
   updateUser: (user: User) => void;
-  apiFetch: (path: string, options?: RequestInit) => Promise<any>;
+  apiFetch: (path: string, options?: ApiFetchOptions) => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || '';
+type ApiFetchOptions = RequestInit & { timeoutMs?: number };
 
 export const buildApiUrl = (path: string) => {
   if (/^https?:\/\//i.test(path)) {
@@ -36,7 +37,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   // Helper function to hit API paths with auth headers automatically injected
-  const apiFetch = async (path: string, options: RequestInit = {}) => {
+  const apiFetch = async (path: string, options: ApiFetchOptions = {}) => {
+    const { timeoutMs = 45000, ...fetchOptions } = options;
     const headers = new Headers(options.headers || {});
     
     // Inject Authorization header if token exists
@@ -46,11 +48,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     
     // Default to JSON body types
-    if (options.body && !(options.body instanceof FormData)) {
+    if (fetchOptions.body && !(fetchOptions.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json');
     }
 
-    const response = await fetch(buildApiUrl(path), { ...options, headers });
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response;
+
+    try {
+      response = await fetch(buildApiUrl(path), {
+        ...fetchOptions,
+        headers,
+        signal: fetchOptions.signal || controller.signal,
+      });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        throw new Error('The server is taking too long to respond. Please try again in a moment.');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
     
     if (response.status === 401 || response.status === 403) {
       // If token expired or unauthorized, trigger automatic client logout

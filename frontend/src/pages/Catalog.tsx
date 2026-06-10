@@ -39,6 +39,7 @@ const Catalog: React.FC = () => {
   const [bookingError, setBookingError] = useState('');
   const [bookingSuccess, setBookingSuccess] = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingWaitMessage, setBookingWaitMessage] = useState('');
 
   const fetchAssets = async () => {
     try {
@@ -80,12 +81,27 @@ const Catalog: React.FC = () => {
     setPurpose('');
     setBookingError('');
     setBookingSuccess('');
+    setBookingWaitMessage('');
   };
+
+  useEffect(() => {
+    if (!bookingLoading) {
+      setBookingWaitMessage('');
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setBookingWaitMessage('Still submitting. The hosted server may be waking up, but this will not stay stuck.');
+    }, 6000);
+
+    return () => window.clearTimeout(timer);
+  }, [bookingLoading]);
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     setBookingError('');
     setBookingSuccess('');
+    setBookingWaitMessage('');
     setBookingLoading(true);
 
     try {
@@ -98,10 +114,11 @@ const Catalog: React.FC = () => {
           endDate,
           purpose,
         }),
+        timeoutMs: 60000,
       });
 
       setBookingSuccess('Booking request submitted successfully! Pending admin approval.');
-      fetchAssets(); // Refresh counts
+      void fetchAssets(); // Refresh counts without blocking the success state
       setTimeout(() => {
         setSelectedAsset(null);
       }, 2000);
@@ -275,6 +292,11 @@ const Catalog: React.FC = () => {
                   <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs font-medium flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
                     <span>{bookingError}</span>
+                  </div>
+                )}
+                {bookingWaitMessage && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-200 rounded-lg text-xs font-medium">
+                    {bookingWaitMessage}
                   </div>
                 )}
 
