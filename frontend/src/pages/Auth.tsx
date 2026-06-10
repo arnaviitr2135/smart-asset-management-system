@@ -16,6 +16,25 @@ const Auth: React.FC = () => {
   const [resetToken, setResetToken] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  const parseAuthResponse = async (response: Response, fallbackMessage: string) => {
+    const contentType = response.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      return response.json();
+    }
+
+    const body = await response.text().catch(() => '');
+    if (response.status === 404 && body.includes('Cannot POST')) {
+      throw new Error('Password reset is not active on the backend yet. Please deploy the latest Render backend commit and try again.');
+    }
+
+    if (!response.ok) {
+      throw new Error(fallbackMessage);
+    }
+
+    return {};
+  };
+
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get('resetToken');
     if (token) {
@@ -45,7 +64,7 @@ const Auth: React.FC = () => {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await parseAuthResponse(response, 'Authentication failed');
 
       if (!response.ok) {
         throw new Error(data.error || 'Authentication failed');
@@ -71,7 +90,7 @@ const Auth: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const data = await response.json();
+      const data = await parseAuthResponse(response, 'Failed to send reset link');
       if (!response.ok) {
         throw new Error(data.error || 'Failed to send reset link');
       }
@@ -106,7 +125,7 @@ const Auth: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: resetToken, password }),
       });
-      const data = await response.json();
+      const data = await parseAuthResponse(response, 'Failed to reset password');
       if (!response.ok) {
         throw new Error(data.error || 'Failed to reset password');
       }
