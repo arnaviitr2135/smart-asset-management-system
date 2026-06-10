@@ -19,10 +19,17 @@ const maskEmail = (email: string) => {
 
 const smtpUser = readEnv('SMTP_USER', 'SMTP_USERNAME', 'SMTP_EMAIL', 'EMAIL_USER', 'SMTP-user');
 const smtpPass = readEnv('SMTP_PASS', 'SMTP_PASSWORD', 'EMAIL_PASS', 'SMTP-pass').replace(/\s+/g, '');
+const resendApiKey = readEnv('RESEND_API_KEY');
+const resendFrom = readEnv('RESEND_FROM') || (smtpUser ? `CultTrack AI <${smtpUser}>` : 'CultTrack AI <onboarding@resend.dev>');
 const isHostedRuntime = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.NODE_ENV === 'production');
 
 // Transporter: Gmail in configured environments, Ethereal only for local development without credentials.
 let transporterPromise = (async () => {
+  if (resendApiKey) {
+    console.log(`[Resend] API email provider configured with from: ${resendFrom}`);
+    return null;
+  }
+
   if (smtpUser && smtpPass) {
     try {
       const transport = nodemailer.createTransport({
@@ -123,7 +130,37 @@ async function sendEmail(
   bodyText: string,
   badge?: { label: string; color: string }
 ) {
+  const fullSubject = `CultTrack: ${subject}`;
+  const text = `Hello ${recipientName},\n\n${bodyText}\n\nThis is an automated notification from CultTrack AI.`;
+  const html = buildEmailHtml(recipientName, subject, bodyText, badge);
+
   try {
+    if (resendApiKey) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: resendFrom,
+          to: [to],
+          subject: fullSubject,
+          text,
+          html,
+        }),
+      });
+
+      const result = await response.json().catch(() => null) as { id?: string; message?: string } | null;
+      if (!response.ok) {
+        console.error('[Resend Error] Failed to send email:', result);
+        return;
+      }
+
+      console.log(`[Resend] Sent to ${to}${result?.id ? ` | ID: ${result.id}` : ''}`);
+      return;
+    }
+
     const transporter = await transporterPromise;
     if (!transporter) {
       console.log(`[Email Skipped] SMTP is not configured or failed verification. To: ${to} | Subject: ${subject}`);
@@ -136,9 +173,9 @@ async function sendEmail(
     const info = await transporter.sendMail({
       from: fromAddress,
       to,
-      subject: `CultTrack: ${subject}`,
-      text: `Hello ${recipientName},\n\n${bodyText}\n\nThis is an automated notification from CultTrack AI.`,
-      html: buildEmailHtml(recipientName, subject, bodyText, badge),
+      subject: fullSubject,
+      text,
+      html,
     });
 
     const previewUrl = nodemailer.getTestMessageUrl(info);
