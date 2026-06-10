@@ -6,7 +6,7 @@ It features an embedded **AI-driven shortage predictor** that uses historical bo
 
 ---
 
-## Deployed App
+## 🌍 Deployed App
 - **Live Frontend:** [https://frontend-seven-lyart-83.vercel.app](https://frontend-seven-lyart-83.vercel.app)
 - **Backend API:** [https://smart-asset-management-and-resource-opww.onrender.com](https://smart-asset-management-and-resource-opww.onrender.com)
 - **Backend Health Check:** [https://smart-asset-management-and-resource-opww.onrender.com/healthz](https://smart-asset-management-and-resource-opww.onrender.com/healthz)
@@ -23,20 +23,57 @@ It features an embedded **AI-driven shortage predictor** that uses historical bo
 
 ## 🚀 Getting Started
 
-### Prerequisites
-Make sure you have **Docker Desktop** installed and running on your local machine.
+### Method 1: Run via Docker Compose (Recommended & Easiest)
+This runs the entire system—including PostgreSQL, backend services, and the frontend web portal—in unified, isolated containers. 
 
-### Run via Docker Compose (Recommended)
-This runs the entire system including PostgreSQL, backend services, and the frontend web portal in unified containers.
+**Prerequisites:** Ensure you have **Docker Desktop** installed and running on your local machine.
 
-1. Open a terminal in the project directory.
+1. Clone the repository and navigate into it:
+
+        git clone [https://github.com/arnaviitr2135/smart-asset-management-system.git](https://github.com/arnaviitr2135/smart-asset-management-system.git)
+        cd smart-asset-management-system
+
 2. Run the build and launch command:
-   ```bash
-   docker compose up --build
-   ```
-3. The server will perform database migrations, seed default items, and start listening:
-   - **Frontend Web Portal:** [http://localhost:5173](http://localhost:5173)
-   - **Backend API Server:** [http://localhost:5000](http://localhost:5000)
+
+        docker compose up --build
+
+3. The server will perform database migrations, seed default items, and start listening automatically at:
+   - **Frontend Web Portal:** http://localhost:5173
+   - **Backend API Server:** http://localhost:5000
+
+---
+
+### Method 2: Manual Local Setup (Fallback)
+*Only follow these steps if you are not using Docker, or if the Docker containers fail to build.*
+
+**Prerequisites:** Node.js and PostgreSQL installed locally. 
+*⚠️ Note: When installing PostgreSQL, make sure to generate a master password you will remember, and cancel the "Stack Builder" prompt at the very end of the installation process.*
+
+1. Clone the repository and navigate into it:
+
+        git clone [https://github.com/arnaviitr2135/smart-asset-management-system.git](https://github.com/arnaviitr2135/smart-asset-management-system.git)
+        cd smart-asset-management-system
+
+2. Update Database Credentials: Open the `backend/.env` file and replace the placeholder password in the `DATABASE_URL` line with the PostgreSQL password you generated during your installation.
+
+        DATABASE_URL="postgresql://postgres:YOUR_ACTUAL_PASSWORD_HERE@localhost:5432/culttrack?schema=public"
+
+3. Open two separate terminal windows. Navigate to the backend folder in the first, and frontend folder in the second:
+
+        cd backend
+        cd frontend
+
+4. Install dependencies. Run this command in both terminals:
+
+        npm install
+
+5. Sync the database. In the backend terminal, run:
+
+        npx prisma db push
+
+6. Start the App. Run this command in both terminals to launch the frontend and backend servers:
+
+        npm run dev
 
 ---
 
