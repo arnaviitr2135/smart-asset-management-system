@@ -3,12 +3,26 @@ import * as nodemailer from 'nodemailer';
 
 const prisma = new PrismaClient();
 
-// ─── Transporter (Gmail via SMTP_USER/SMTP_PASS, fallback to Ethereal) ───────
-let transporterPromise = (async () => {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+const readEnv = (...keys: string[]) => {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return '';
+};
 
-  // If Gmail credentials are set, use Gmail SMTP
+const maskEmail = (email: string) => {
+  const [name, domain] = email.split('@');
+  if (!name || !domain) return 'configured';
+  return `${name.slice(0, 2)}***@${domain}`;
+};
+
+const smtpUser = readEnv('SMTP_USER', 'SMTP_USERNAME', 'SMTP_EMAIL', 'EMAIL_USER', 'SMTP-user');
+const smtpPass = readEnv('SMTP_PASS', 'SMTP_PASSWORD', 'EMAIL_PASS', 'SMTP-pass').replace(/\s+/g, '');
+const isHostedRuntime = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.NODE_ENV === 'production');
+
+// Transporter: Gmail in configured environments, Ethereal only for local development without credentials.
+let transporterPromise = (async () => {
   if (smtpUser && smtpPass) {
     try {
       const transport = nodemailer.createTransport({
@@ -20,21 +34,24 @@ let transporterPromise = (async () => {
       });
 
       await transport.verify();
-      console.log(`[SMTP] ✅ Gmail SMTP connected as: ${smtpUser}`);
-      console.log(`[SMTP] Emails will be delivered to REAL inboxes.`);
+      console.log(`[SMTP] Gmail SMTP connected as: ${maskEmail(smtpUser)}`);
+      console.log('[SMTP] Emails will be delivered to REAL inboxes.');
       return transport;
     } catch (err) {
-      console.error('[SMTP Error] Gmail auth failed, falling back to Ethereal test inbox.', err);
+      console.error('[SMTP Error] Gmail auth failed. Real emails will NOT be delivered until SMTP_USER/SMTP_PASS are fixed.', err);
+      return null;
     }
-  } else {
-    console.log(`[SMTP] No SMTP_USER/SMTP_PASS in .env — using Ethereal test inbox.`);
-    console.log(`[SMTP] To send REAL emails, add your Gmail credentials to backend/.env`);
   }
 
-  // Fallback: Ethereal test account (emails visible via preview URLs in console)
+  console.log('[SMTP] Missing SMTP_USER or SMTP_PASS. Real emails will NOT be delivered.');
+  if (isHostedRuntime) {
+    console.log('[SMTP] Add SMTP_USER and SMTP_PASS in Render Environment, then redeploy/restart.');
+    return null;
+  }
+
   try {
     const account = await nodemailer.createTestAccount();
-    console.log(`[SMTP] Ethereal test inbox: ${account.user}`);
+    console.log(`[SMTP] Local Ethereal test inbox: ${account.user}`);
     return nodemailer.createTransport({
       host: account.smtp.host,
       port: account.smtp.port,
@@ -50,7 +67,6 @@ let transporterPromise = (async () => {
   }
 })();
 
-// ─── Shared HTML email builder ────────────────────────────────────────────────
 function buildEmailHtml(
   recipientName: string,
   title: string,
@@ -70,16 +86,14 @@ function buildEmailHtml(
       <div style="max-width:560px;margin:40px auto;background:#1a1c23;border-radius:16px;
         overflow:hidden;border:1px solid #2b2e3a;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
 
-        <!-- Header -->
         <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:28px 32px;">
           <h1 style="margin:0;font-size:20px;font-weight:700;color:#fff;letter-spacing:-0.5px;">
-            🛡️ CultTrack <span style="color:#c4b5fd;">AI</span>
+            CultTrack <span style="color:#c4b5fd;">AI</span>
           </h1>
           <p style="margin:4px 0 0;font-size:11px;color:rgba(255,255,255,0.6);
             text-transform:uppercase;letter-spacing:2px;">IIT Roorkee Cultural Council</p>
         </div>
 
-        <!-- Body -->
         <div style="padding:28px 32px;color:#e2e4ea;">
           <p style="margin:0 0 8px;font-size:14px;color:#9ca3af;">Hello,</p>
           <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#fff;">${recipientName}</p>
@@ -92,7 +106,6 @@ function buildEmailHtml(
           ${badgeHtml}
         </div>
 
-        <!-- Footer -->
         <div style="padding:16px 32px;border-top:1px solid #2b2e3a;background:#12141a;">
           <p style="margin:0;font-size:11px;color:#4b5563;text-align:center;">
             This is an automated message from CultTrack AI. Please do not reply directly.
@@ -103,7 +116,6 @@ function buildEmailHtml(
   `;
 }
 
-// ─── Core send email helper (raw, no DB notification) ───────────────────────
 async function sendEmail(
   to: string,
   recipientName: string,
@@ -114,12 +126,12 @@ async function sendEmail(
   try {
     const transporter = await transporterPromise;
     if (!transporter) {
-      console.log(`[Email Sandbox] To: ${to} | Subject: ${subject} | Body: ${bodyText}`);
+      console.log(`[Email Skipped] SMTP is not configured or failed verification. To: ${to} | Subject: ${subject}`);
       return;
     }
 
-    const fromAddress = process.env.SMTP_USER
-      ? `"CultTrack AI" <${process.env.SMTP_USER}>`
+    const fromAddress = smtpUser
+      ? `"CultTrack AI" <${smtpUser}>`
       : '"CultTrack AI" <no-reply@culttrack.in>';
     const info = await transporter.sendMail({
       from: fromAddress,
@@ -130,13 +142,12 @@ async function sendEmail(
     });
 
     const previewUrl = nodemailer.getTestMessageUrl(info);
-    console.log(`[Email] Sent to ${to} → Preview: ${previewUrl}`);
+    console.log(`[Email] Sent to ${to}${previewUrl ? ` | Preview: ${previewUrl}` : ''}`);
   } catch (error) {
     console.error(`[Email Error] Failed to send to ${to}:`, error);
   }
 }
 
-// ─── Create in-app notification + send email to ONE user ─────────────────────
 export async function createNotification(
   userId: string,
   title: string,
@@ -164,7 +175,6 @@ export async function createNotification(
   }
 }
 
-// ─── Send email + in-app notification to ALL ADMINs ─────────────────────────
 export async function sendPasswordResetEmail(to: string, recipientName: string, resetUrl: string) {
   await sendEmail(
     to,
@@ -202,7 +212,6 @@ export async function notifyAdmins(
   }
 }
 
-// ─── Audit Logger ─────────────────────────────────────────────────────────────
 export async function logAudit(userId: string, action: string, details: string) {
   try {
     const log = await prisma.auditLog.create({
