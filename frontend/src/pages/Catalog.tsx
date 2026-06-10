@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Search, Filter, Camera, Music, Lightbulb, UserCheck, Settings, BookOpen, Layers, CheckCircle2, AlertTriangle, Boxes, PackageCheck, SlidersHorizontal } from 'lucide-react';
 
@@ -40,6 +40,7 @@ const Catalog: React.FC = () => {
   const [bookingSuccess, setBookingSuccess] = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingWaitMessage, setBookingWaitMessage] = useState('');
+  const bookingRequestIdRef = useRef(0);
 
   const fetchAssets = async () => {
     try {
@@ -82,6 +83,7 @@ const Catalog: React.FC = () => {
     setBookingError('');
     setBookingSuccess('');
     setBookingWaitMessage('');
+    bookingRequestIdRef.current += 1;
   };
 
   useEffect(() => {
@@ -99,6 +101,17 @@ const Catalog: React.FC = () => {
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
+    const requestId = bookingRequestIdRef.current + 1;
+    bookingRequestIdRef.current = requestId;
+    const controller = new AbortController();
+    const releaseTimer = window.setTimeout(() => {
+      if (bookingRequestIdRef.current !== requestId) return;
+      controller.abort();
+      setBookingLoading(false);
+      setBookingWaitMessage('');
+      setBookingError('The request is taking too long. The backend may still be processing it, so check Bookings & Loans before retrying.');
+    }, 20000);
+
     setBookingError('');
     setBookingSuccess('');
     setBookingWaitMessage('');
@@ -114,18 +127,30 @@ const Catalog: React.FC = () => {
           endDate,
           purpose,
         }),
-        timeoutMs: 60000,
+        signal: controller.signal,
+        timeoutMs: 20000,
       });
 
+      if (bookingRequestIdRef.current !== requestId) return;
       setBookingSuccess('Booking request submitted successfully! Pending admin approval.');
       void fetchAssets(); // Refresh counts without blocking the success state
       setTimeout(() => {
-        setSelectedAsset(null);
+        if (bookingRequestIdRef.current === requestId) {
+          setSelectedAsset(null);
+        }
       }, 2000);
     } catch (err: any) {
-      setBookingError(err.message || 'Failed to place booking request');
+      if (bookingRequestIdRef.current !== requestId) return;
+      setBookingError(
+        controller.signal.aborted
+          ? 'The request is taking too long. The backend may still be processing it, so check Bookings & Loans before retrying.'
+          : err.message || 'Failed to place booking request'
+      );
     } finally {
-      setBookingLoading(false);
+      window.clearTimeout(releaseTimer);
+      if (bookingRequestIdRef.current === requestId) {
+        setBookingLoading(false);
+      }
     }
   };
 
@@ -356,7 +381,11 @@ const Catalog: React.FC = () => {
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedAsset(null)}
+                    onClick={() => {
+                      bookingRequestIdRef.current += 1;
+                      setBookingLoading(false);
+                      setSelectedAsset(null);
+                    }}
                     className="w-1/2 py-2 rounded-lg text-xs font-semibold btn-secondary"
                   >
                     Cancel
