@@ -1,118 +1,349 @@
-# CultTrack AI: Smart Asset Management & Resource Allocation Platform
+# CultTrack AI - Smart Asset Management System
 
-CultTrack AI is a full-stack booking, inventory, and resource allocation platform developed for the Cultural Council of IIT Roorkee to manage shared assets (e.g. DSLR Cameras, Studio Lights, Sound Systems, Costumes). 
+CultTrack AI is a full-stack inventory, booking, resource allocation, and audit platform built for the Cultural Council of IIT Roorkee. It helps council admins manage shared assets such as cameras, lights, audio gear, costumes, props, and stage infrastructure while giving members a simple way to request resource loans.
 
-It features an embedded **AI-driven shortage predictor** that uses historical bookings to forecast demand trends and prevent stock exhaustion.
+The platform includes live inventory tracking, booking approvals, issue/return workflows, QR-assisted check-in, notification emails, password reset, analytics, and demand forecasting.
 
----
+## Live Deployment
 
-## 🌍 Deployed App
-- **Live Frontend:** [https://frontend-seven-lyart-83.vercel.app](https://frontend-seven-lyart-83.vercel.app)
-- **Backend API:** [https://smart-asset-management-and-resource-opww.onrender.com](https://smart-asset-management-and-resource-opww.onrender.com)
-- **Backend Health Check:** [https://smart-asset-management-and-resource-opww.onrender.com/healthz](https://smart-asset-management-and-resource-opww.onrender.com/healthz)
+- Frontend: [https://frontend-seven-lyart-83.vercel.app](https://frontend-seven-lyart-83.vercel.app)
+- Backend API: [https://smart-asset-management-system-oiyh.onrender.com](https://smart-asset-management-system-oiyh.onrender.com)
+- Backend health check: [https://smart-asset-management-system-oiyh.onrender.com/healthz](https://smart-asset-management-system-oiyh.onrender.com/healthz)
+- Repository: [https://github.com/arnaviitr2135/smart-asset-management-system](https://github.com/arnaviitr2135/smart-asset-management-system)
 
----
+## Features
 
-## 🛠️ Technology Stack
-- **Frontend:** React, Vite, TypeScript, Tailwind CSS, Recharts, Lucide Icons
-- **Backend:** Node.js, Express, TypeScript, Prisma ORM
-- **Database:** PostgreSQL
-- **Orchestration:** Docker, Docker Compose
+- User authentication with JWT-based sessions
+- User and admin roles
+- User registration and login
+- Forgot password and reset password flow
+- Email notifications through Resend API, with Gmail SMTP fallback
+- Inventory catalog with category filters and availability counts
+- Asset categories for camera, lighting, audio, costume, prop, recording, and infrastructure items
+- Asset CRUD operations for council admins
+- Booking request workflow with quantity and date validation
+- Overlapping booking checks to prevent over-allocation
+- Admin approval and rejection workflow
+- Asset issue, return, and overdue allocation tracking
+- QR-code based asset scan simulation
+- Asset health reports and damaged/maintenance state handling
+- In-app notifications
+- Audit log for important user and admin actions
+- Analytics dashboard with utilization metrics
+- AI-style demand forecasting and shortage prediction
+- Responsive Vite React frontend
+- Docker Compose setup for local full-stack development
+- Render, Vercel, and Neon deployment support
 
----
+## Tech Stack
 
-## 🚀 Getting Started
+Frontend:
 
-### Method 1: Run via Docker Compose (Recommended & Easiest)
-This runs the entire system—including PostgreSQL, backend services, and the frontend web portal—in unified, isolated containers. 
+- React
+- Vite
+- TypeScript
+- Tailwind CSS
+- Recharts
+- Lucide React icons
 
-**Prerequisites:** Ensure you have **Docker Desktop** installed and running on your local machine.
+Backend:
 
-1. Clone the repository and navigate into it:
+- Node.js
+- Express
+- TypeScript
+- Prisma ORM
+- PostgreSQL
+- JWT authentication
+- Nodemailer
+- Resend email API
 
-        git clone [https://github.com/arnaviitr2135/smart-asset-management-system.git](https://github.com/arnaviitr2135/smart-asset-management-system.git)
-        cd smart-asset-management-system
+Deployment:
 
-2. Run the build and launch command:
+- Vercel for frontend
+- Render for backend
+- Neon PostgreSQL for production database
+- Docker and Docker Compose for local development
 
-        docker compose up --build
+## Project Structure
 
-3. The server will perform database migrations, seed default items, and start listening automatically at:
-   - **Frontend Web Portal:** http://localhost:5173
-   - **Backend API Server:** http://localhost:5000
+```text
+smart-asset-management-system/
+  backend/
+    prisma/
+      schema.prisma
+      seed.ts
+    src/
+      controllers/
+      middleware/
+      routes/
+      services/
+      index.ts
+    Dockerfile
+    Dockerfile.render
+    package.json
+  frontend/
+    src/
+      context/
+      pages/
+      App.tsx
+      main.tsx
+    Dockerfile
+    vercel.json
+    package.json
+  docker-compose.yml
+  render.yaml
+  README.md
+```
 
----
+## Demo Accounts
 
-### Method 2: Manual Local Setup (Fallback)
-*Only follow these steps if you are not using Docker, or if the Docker containers fail to build.*
+The local seed script creates these accounts:
 
-**Prerequisites:** Node.js and PostgreSQL installed locally. 
-*⚠️ Note: When installing PostgreSQL, make sure to generate a master password you will remember, and cancel the "Stack Builder" prompt at the very end of the installation process.*
-
-1. Clone the repository and navigate into it:
-
-        git clone [https://github.com/arnaviitr2135/smart-asset-management-system.git](https://github.com/arnaviitr2135/smart-asset-management-system.git)
-        cd smart-asset-management-system
-
-2. Update Database Credentials: Open the `backend/.env` file and replace the placeholder password in the `DATABASE_URL` line with the PostgreSQL password you generated during your installation.
-
-        DATABASE_URL="postgresql://postgres:YOUR_ACTUAL_PASSWORD_HERE@localhost:5432/culttrack?schema=public"
-
-3. Open two separate terminal windows. Navigate to the backend folder in the first, and frontend folder in the second:
-
-        cd backend
-        cd frontend
-
-4. Install dependencies. Run this command in both terminals:
-
-        npm install
-
-5. Sync the database. In the backend terminal, run:
-
-        npx prisma db push
-
-6. Start the App. Run this command in both terminals to launch the frontend and backend servers:
-
-        npm run dev
-
----
-
-## 🔑 Demo Access Credentials
-
-The database is pre-seeded with two accounts and standard assets for verification:
-
-| Role | Username | Password | Actions / Access |
+| Role | Email | Password | Access |
 | --- | --- | --- | --- |
-| **Council Admin** | `admin@culttrack.in` | `password123` | Asset CRUD, Booking Approval Queue, Check-in/Check-out Desk, Security Audits |
-| **Society Member** | `member@culttrack.in` | `password123` | Browsing catalog, checking availability, placing loan requests, tracking returns |
+| Council Admin | `admin@culttrack.in` | `password123` | Asset management, approvals, issue/return desk, health logs, audit logs |
+| Society Member | `member@culttrack.in` | `password123` | Browse catalog, request bookings, view loans and notifications |
 
-*Note: You can also use the registration form to create new accounts. For administrative roles during development, tick the "Register as Council Admin?" checkbox on the sign-up form.*
+Production data depends on the connected Neon database. If a password reset email is not sent, confirm that the email address exists in the production users table.
 
----
+## Local Setup With Docker
 
-## 💎 Core Features & Verification Guide
+Prerequisites:
 
-### 1. Inventory & Booking Desk
-- Browse items grouped by category with live count meters.
-- Select booking dates and quantity. The backend runs overlapping check equations to prevent booking quantities that exceed physical inventory limits.
+- Docker Desktop
+- Git
 
-### 2. Admin Approvals & Handover
-- Log in as `admin@culttrack.in`.
-- Open **Admin Desk** &rarr; **Requests & Issuance**.
-- Review pending requests. Click **Approve** to authorize the loan, and then **Handover / Issue** once the member physically collects the gear.
+Clone and run:
 
-### 3. QR Code Operations
-- Open the **Inventory Manager** sub-tab in the Admin Desk to click the QR code icon next to any asset and render its generated identification link.
-- Open the **Check-in Desk (QR)** and pick any asset model in the dropdown to simulate scanning. This instantly parses the asset record, shows live stock details, and enables rapid check-in operations.
+```bash
+git clone https://github.com/arnaviitr2135/smart-asset-management-system.git
+cd smart-asset-management-system
+docker compose up --build
+```
 
-### 4. Damage & Health Reports
-- When checking in an asset, admins can mark it as `DAMAGED`.
-- This automatically logs a report in the **Health Logs** table and transitions the asset's operational status to `MAINTENANCE`, removing it from the catalog.
+Local URLs:
 
-### 5. Audit Compliance
-- All creations, updates, approvals, checkouts, and returns are permanently written to the **System Audit Log** database, accessible under the compliance sub-panel in the Admin Desk.
+- Frontend: [http://localhost:5173](http://localhost:5173)
+- Backend API: [http://localhost:5000](http://localhost:5000)
+- Health check: [http://localhost:5000/healthz](http://localhost:5000/healthz)
 
-### 6. AI Booking Forecasts
-- Go to the **Analytics & AI** tab.
-- The system graphs current utilization rates and showcases a **Demand Predictor** table.
-- Utilizing a weekly weighted moving average, it predicts item volume needs for next week and triggers `CRITICAL SHORTAGE` alarms if forecast levels approach total quantities.
+The Docker setup starts PostgreSQL, syncs the Prisma schema, seeds demo users/assets, starts the backend, and starts the frontend.
+
+## Manual Local Setup
+
+Prerequisites:
+
+- Node.js 20+
+- PostgreSQL
+- Git
+
+Backend:
+
+```bash
+cd backend
+npm install
+npx prisma db push
+npm run prisma:seed
+npm run dev
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Environment Variables
+
+Create `backend/.env` for local backend development:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/culttrack?schema=public
+JWT_SECRET=culttrack-super-secret-key
+PORT=5000
+FRONTEND_URL=http://localhost:5173
+
+# Recommended email provider
+RESEND_API_KEY=
+RESEND_FROM=CultTrack AI <onboarding@resend.dev>
+
+# Optional Gmail SMTP fallback
+SMTP_USER=
+SMTP_PASS=
+```
+
+Frontend local env, if running without Docker:
+
+```env
+VITE_API_URL=http://localhost:5000
+```
+
+Never commit real secrets or API keys.
+
+## Production Environment
+
+Vercel frontend environment:
+
+```env
+VITE_API_URL=https://smart-asset-management-system-oiyh.onrender.com
+```
+
+Render backend environment:
+
+```env
+DATABASE_URL=<Neon pooled PostgreSQL connection string>
+JWT_SECRET=<strong random secret>
+PORT=5000
+FRONTEND_URL=https://frontend-seven-lyart-83.vercel.app
+RESEND_API_KEY=<Resend API key>
+RESEND_FROM=CultTrack AI <onboarding@resend.dev>
+```
+
+Optional Render SMTP fallback:
+
+```env
+SMTP_USER=<gmail address>
+SMTP_PASS=<gmail app password>
+```
+
+For production-quality email delivery, verify a domain in Resend and use an address such as:
+
+```env
+RESEND_FROM=CultTrack AI <noreply@yourdomain.com>
+```
+
+## Deployment Notes
+
+Frontend deployment:
+
+- Deployed on Vercel from the `frontend` app.
+- `VITE_API_URL` must point to the Render backend URL.
+- Redeploy Vercel after changing frontend environment variables.
+
+Backend deployment:
+
+- Deployed on Render using Docker.
+- Current backend Dockerfile path is `backend/Dockerfile.render`.
+- Docker build context should be `backend`.
+- The backend starts with `node dist/index.js`.
+- Run Prisma schema sync separately when schema changes:
+
+```bash
+npx prisma db push
+```
+
+Database:
+
+- Production uses Neon PostgreSQL.
+- Local Docker uses a Postgres 16 container.
+
+## Email And Password Reset
+
+Password reset flow:
+
+1. User requests a reset link from the frontend.
+2. Backend checks if the email exists.
+3. If the user exists, a reset token is created.
+4. The email provider sends a reset link to the user.
+5. The user opens the link and sets a new password.
+
+Important behavior:
+
+- The backend intentionally returns a generic success message for both registered and non-registered emails.
+- If Render logs show `Request received for non-registered email`, no email will be sent.
+- If Resend is configured correctly, Render logs should show `[Resend] Sent to ...`.
+- If Gmail SMTP fallback is used, Render logs should show `[SMTP] Gmail SMTP connected ...`.
+
+## API Overview
+
+Base URL:
+
+```text
+https://smart-asset-management-system-oiyh.onrender.com
+```
+
+Main route groups:
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/forgot-password`
+- `POST /api/v1/auth/reset-password`
+- `/api/v1/assets`
+- `/api/v1/bookings`
+- `/api/v1/allocations`
+- `/api/v1/analytics`
+- `/api/v1/audit`
+- `/api/v1/notifications`
+- `GET /healthz`
+
+Most protected routes require:
+
+```http
+Authorization: Bearer <jwt_token>
+```
+
+## Typical Workflow
+
+Member workflow:
+
+1. Register or log in.
+2. Browse the inventory catalog.
+3. Select an asset, quantity, start date, end date, and purpose.
+4. Submit a booking request.
+5. Track booking status and notifications.
+6. Return issued assets after use.
+
+Admin workflow:
+
+1. Log in as an admin.
+2. Add or update inventory assets.
+3. Review pending booking requests.
+4. Approve or reject requests.
+5. Issue approved assets.
+6. Mark returns and asset condition.
+7. Review health logs, audit logs, and analytics.
+
+## Troubleshooting
+
+Backend health:
+
+```bash
+curl https://smart-asset-management-system-oiyh.onrender.com/healthz
+```
+
+If forgot password does not send email:
+
+- Confirm the email is registered in production.
+- Confirm `RESEND_API_KEY` is set on Render.
+- Confirm `RESEND_FROM` is set.
+- Redeploy/restart Render after changing environment variables.
+- Check Render logs for `[Password Reset]`, `[Resend]`, `[SMTP]`, or `[Email Error]`.
+
+If frontend cannot reach backend:
+
+- Confirm Vercel has `VITE_API_URL=https://smart-asset-management-system-oiyh.onrender.com`.
+- Redeploy Vercel after changing env vars.
+- Confirm Render health check is passing.
+
+If Docker local database has old data:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+This resets the local Postgres volume and reseeds demo data.
+
+## Security Notes
+
+- Do not commit `.env` files or secrets.
+- Use a strong `JWT_SECRET` in production.
+- Rotate leaked SMTP passwords or API keys immediately.
+- Prefer Resend API keys over Gmail SMTP for hosted deployments.
+- Use verified Resend domains for production email.
+
+## License
+
+This project is currently marked as ISC in `package.json`.
