@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { buildApiUrl, useAuth } from '../context/AuthContext';
 import { Mail, Lock, User as UserIcon, Shield, Database, Sparkles, ArrowRight } from 'lucide-react';
 
@@ -10,11 +10,25 @@ const Auth: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [authMode, setAuthMode] = useState<'auth' | 'forgot' | 'reset'>('auth');
+  const [resetToken, setResetToken] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('resetToken');
+    if (token) {
+      setResetToken(token);
+      setIsLogin(true);
+      setAuthMode('reset');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
     const path = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/register';
@@ -43,6 +57,80 @@ const Auth: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const response = await fetch(buildApiUrl('/api/v1/auth/forgot-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send reset link');
+      }
+      setSuccess(data.message || 'If an account exists, a reset link has been sent.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to send reset link');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(buildApiUrl('/api/v1/auth/reset-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reset password');
+      }
+
+      setSuccess(data.message || 'Password reset successfully. You can now sign in.');
+      setPassword('');
+      setConfirmPassword('');
+      setResetToken('');
+      setAuthMode('auth');
+      setIsLogin(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchAuthMode = (mode: 'auth' | 'forgot' | 'reset') => {
+    setAuthMode(mode);
+    setError('');
+    setSuccess('');
+    setPassword('');
+    setConfirmPassword('');
   };
 
   return (
@@ -90,9 +178,23 @@ const Auth: React.FC = () => {
                 <Database className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="page-kicker">{isLogin ? 'Secure sign in' : 'New workspace access'}</p>
+                <p className="page-kicker">
+                  {authMode === 'forgot'
+                    ? 'Account recovery'
+                    : authMode === 'reset'
+                    ? 'Set new password'
+                    : isLogin
+                    ? 'Secure sign in'
+                    : 'New workspace access'}
+                </p>
                 <h2 className="text-xl font-bold font-sans">
-                  {isLogin ? 'Welcome back' : 'Create society account'}
+                  {authMode === 'forgot'
+                    ? 'Reset your password'
+                    : authMode === 'reset'
+                    ? 'Choose a new password'
+                    : isLogin
+                    ? 'Welcome back'
+                    : 'Create society account'}
                 </h2>
               </div>
             </div>
@@ -102,9 +204,23 @@ const Auth: React.FC = () => {
                 {error}
               </div>
             )}
+            {success && (
+              <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-lg text-xs font-medium">
+                {success}
+              </div>
+            )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {!isLogin && (
+            <form
+              onSubmit={
+                authMode === 'forgot'
+                  ? handleForgotPassword
+                  : authMode === 'reset'
+                  ? handleResetPassword
+                  : handleSubmit
+              }
+              className="space-y-4"
+            >
+              {!isLogin && authMode === 'auth' && (
                 <div>
                   <label className="block text-xs font-medium text-dark-300 mb-1">Full Name</label>
                   <div className="relative">
@@ -121,7 +237,8 @@ const Auth: React.FC = () => {
                 </div>
               )}
 
-              <div>
+              {authMode !== 'reset' && (
+                <div>
                 <label className="block text-xs font-medium text-dark-300 mb-1">IITR Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3.5 w-4 h-4 text-dark-400" />
@@ -134,9 +251,11 @@ const Auth: React.FC = () => {
                     className="w-full pl-10 pr-4 py-3 rounded-lg glass-input text-sm"
                   />
                 </div>
-              </div>
+                </div>
+              )}
 
-              <div>
+              {authMode !== 'forgot' && (
+                <div>
                 <label className="block text-xs font-medium text-dark-300 mb-1">Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3.5 w-4 h-4 text-dark-400" />
@@ -149,9 +268,27 @@ const Auth: React.FC = () => {
                     className="w-full pl-10 pr-4 py-3 rounded-lg glass-input text-sm"
                   />
                 </div>
-              </div>
+                </div>
+              )}
 
-              {!isLogin && (
+              {authMode === 'reset' && (
+                <div>
+                  <label className="block text-xs font-medium text-dark-300 mb-1">Confirm Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3.5 w-4 h-4 text-dark-400" />
+                    <input
+                      type="password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm your new password"
+                      className="w-full pl-10 pr-4 py-3 rounded-lg glass-input text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {!isLogin && authMode === 'auth' && (
                 <div className="flex items-center justify-between p-2.5 rounded-lg border border-teal-400/20 bg-teal-400/5 mt-2">
                   <span className="text-xs text-teal-300 flex items-center gap-1.5 font-medium">
                     <Shield className="w-3.5 h-3.5" /> Register as Council Admin?
@@ -177,24 +314,51 @@ const Auth: React.FC = () => {
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
-                    {isLogin ? 'Sign In' : 'Create Account'}
+                    {authMode === 'forgot'
+                      ? 'Send Reset Link'
+                      : authMode === 'reset'
+                      ? 'Update Password'
+                      : isLogin
+                      ? 'Sign In'
+                      : 'Create Account'}
                     <ArrowRight className="w-4 h-4" />
                   </span>
                 )}
               </button>
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-6 text-center space-y-2">
+              {authMode === 'auth' && isLogin && (
+                <button
+                  onClick={() => switchAuthMode('forgot')}
+                  className="block mx-auto text-xs text-dark-300 hover:text-teal-200 hover:underline transition-colors"
+                >
+                  Forgot password?
+                </button>
+              )}
               <button
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => {
+                  if (authMode !== 'auth') {
+                    switchAuthMode('auth');
+                    setIsLogin(true);
+                    return;
+                  }
+                  setError('');
+                  setSuccess('');
+                  setIsLogin(!isLogin);
+                }}
                 className="text-xs text-teal-300 hover:text-teal-200 hover:underline transition-colors"
               >
-                {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+                {authMode === 'auth'
+                  ? isLogin
+                    ? "Don't have an account? Sign up"
+                    : 'Already have an account? Sign in'
+                  : 'Back to sign in'}
               </button>
             </div>
           </div>
 
-          {isLogin && (
+          {isLogin && authMode === 'auth' && (
             <div className="mt-4 p-4 rounded-xl border border-white/10 glass-panel text-xs text-dark-300 flex flex-col gap-2">
               <span className="font-semibold text-teal-300 uppercase tracking-wider text-[10px]">Demo credentials (seeded):</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

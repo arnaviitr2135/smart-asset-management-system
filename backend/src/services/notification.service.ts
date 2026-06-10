@@ -165,6 +165,16 @@ export async function createNotification(
 }
 
 // ─── Send email + in-app notification to ALL ADMINs ─────────────────────────
+export async function sendPasswordResetEmail(to: string, recipientName: string, resetUrl: string) {
+  await sendEmail(
+    to,
+    recipientName,
+    'Password Reset Request',
+    `We received a request to reset your CultTrack password. Use this secure link within 30 minutes:<br/><br/><a href="${resetUrl}" style="color:#93c5fd;font-weight:700;">Reset your password</a><br/><br/>If the button does not open, copy this link: ${resetUrl}`,
+    { label: 'RESET PASSWORD', color: '#4f46e5' }
+  );
+}
+
 export async function notifyAdmins(
   title: string,
   message: string,

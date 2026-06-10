@@ -61,6 +61,7 @@ model User {
   healthReports       AssetHealthReport[]
   auditLogs           AuditLog[]
   notifications       Notification[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model Asset {
@@ -153,4 +154,16 @@ model Notification {
   type      String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
