@@ -449,6 +449,78 @@ export async function returnAsset(req: AuthenticatedRequest, res: Response) {
   }
 }
 
+export async function requestReturnAsset(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { allocationId, notes } = req.body;
+    const userId = req.user!.id;
+    const role = req.user!.role;
+
+    if (!allocationId) {
+      return res.status(400).json({ error: 'Allocation ID is required' });
+    }
+
+    const allocation = await prisma.allocation.findUnique({
+      where: { id: allocationId },
+      include: {
+        asset: true,
+        user: {
+          select: { id: true, email: true, fullName: true },
+        },
+        booking: true,
+      },
+    });
+
+    if (!allocation) {
+      return res.status(404).json({ error: 'Allocation record not found' });
+    }
+
+    if (role !== 'ADMIN' && allocation.userId !== userId) {
+      return res.status(403).json({ error: 'You can only request returns for your own issued assets' });
+    }
+
+    if (allocation.status === AllocationStatus.RETURNED) {
+      return res.status(400).json({ error: 'This asset has already been returned' });
+    }
+
+    if (allocation.status !== AllocationStatus.ISSUED) {
+      return res.status(400).json({ error: 'Only issued assets can be requested for return' });
+    }
+
+    const trimmedNotes = typeof notes === 'string' ? notes.trim() : '';
+    const dueDate = allocation.dueDate.toLocaleDateString();
+    const returnNotes = trimmedNotes || 'No additional notes provided.';
+
+    await createNotification(
+      allocation.userId,
+      'Return Request Submitted',
+      `Your return request for <strong>${allocation.quantity}x "${allocation.asset.name}"</strong> has been sent to the council desk. Please bring the item to an admin for check-in verification.`,
+      'RETURN_REQUEST',
+      { label: 'RETURN REQUESTED', color: '#0ea5e9' }
+    );
+
+    await notifyAdmins(
+      'Return Requested',
+      `<strong>${allocation.user.fullName}</strong> (${allocation.user.email}) wants to return <strong>${allocation.quantity}x "${allocation.asset.name}"</strong>.<br/><br/>Due date: <strong>${dueDate}</strong><br/>User notes: <em>${returnNotes}</em><br/><br/>Please verify the item condition and complete the return from the Admin Desk.`,
+      'RETURN_REQUEST',
+      { label: 'CHECK-IN NEEDED', color: '#0ea5e9' }
+    );
+
+    await logAudit(
+      userId,
+      'RETURN_REQUEST',
+      `Return requested for allocation ${allocationId}: ${allocation.quantity}x "${allocation.asset.name}"`
+    );
+
+    res.json({
+      message: 'Return request sent to the admin desk.',
+      allocationId,
+    });
+  } catch (error: any) {
+    console.error('Error requesting asset return:', error);
+    res.status(400).json({ error: error.message || 'Return request failed' });
+  }
+}
+
 export async function getAllocations(req: AuthenticatedRequest, res: Response) {
   try {
     const { status } = req.query;

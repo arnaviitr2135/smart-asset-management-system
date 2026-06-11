@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Calendar, CheckCircle, Clock, XCircle, ArrowRight, CornerDownRight } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, XCircle, ArrowRight, CornerDownRight, RotateCcw } from 'lucide-react';
 
 const BookingsList: React.FC = () => {
   const { apiFetch } = useAuth();
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [returningIds, setReturningIds] = useState<Set<string>>(new Set());
+  const [returnRequestedIds, setReturnRequestedIds] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState<string | null>(null);
 
   const fetchBookings = async () => {
     try {
@@ -23,6 +26,33 @@ const BookingsList: React.FC = () => {
   useEffect(() => {
     fetchBookings();
   }, []);
+
+  const handleRequestReturn = async (allocation: any) => {
+    const notes = window.prompt('Any notes for the admin desk before return? You can leave this blank.');
+    if (notes === null) return;
+
+    try {
+      setNotice(null);
+      setReturningIds((current) => new Set(current).add(allocation.id));
+      await apiFetch('/api/v1/allocations/request-return', {
+        method: 'POST',
+        body: JSON.stringify({
+          allocationId: allocation.id,
+          notes,
+        }),
+      });
+      setReturnRequestedIds((current) => new Set(current).add(allocation.id));
+      setNotice('Return request sent to the admin desk. Please bring the item for check-in verification.');
+    } catch (err: any) {
+      setNotice(err.message || 'Return request failed. Please try again.');
+    } finally {
+      setReturningIds((current) => {
+        const next = new Set(current);
+        next.delete(allocation.id);
+        return next;
+      });
+    }
+  };
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -57,6 +87,12 @@ const BookingsList: React.FC = () => {
         <p className="text-sm text-dark-400">Track current loan requests, active assets, and due dates.</p>
       </div>
 
+      {notice && (
+        <div className="rounded-xl border border-brand-500/20 bg-brand-500/10 px-4 py-3 text-sm text-brand-100">
+          {notice}
+        </div>
+      )}
+
       {loading ? (
         <div className="py-20 flex justify-center">
           <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
@@ -73,6 +109,9 @@ const BookingsList: React.FC = () => {
             const isReturned = booking.allocation?.status === 'RETURNED';
             const isOverdue = booking.allocation?.status === 'OVERDUE' || 
               (booking.allocation?.status === 'ISSUED' && new Date(booking.allocation.dueDate) < new Date());
+            const canRequestReturn = booking.allocation?.status === 'ISSUED' && !returnRequestedIds.has(booking.allocation.id);
+            const returnRequestSent = booking.allocation && returnRequestedIds.has(booking.allocation.id);
+            const isRequestingReturn = booking.allocation && returningIds.has(booking.allocation.id);
 
             return (
               <div 
@@ -159,6 +198,22 @@ const BookingsList: React.FC = () => {
                             {booking.allocation.returnRecord.conditionOnReturn.toLowerCase()}
                           </span>
                         </div>
+                      )}
+
+                      {!isReturned && (
+                        <button
+                          type="button"
+                          onClick={() => handleRequestReturn(booking.allocation)}
+                          disabled={!canRequestReturn || !!isRequestingReturn}
+                          className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                            returnRequestSent
+                              ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                              : 'border border-brand-500/30 bg-brand-500/10 text-brand-100 hover:bg-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60'
+                          }`}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          {returnRequestSent ? 'Return Requested' : isRequestingReturn ? 'Sending...' : 'Request Return'}
+                        </button>
                       )}
                     </div>
                   </div>

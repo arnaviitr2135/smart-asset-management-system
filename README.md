@@ -25,6 +25,7 @@ The platform includes live inventory tracking, booking approvals, issue/return w
 - Overlapping booking checks to prevent over-allocation
 - Admin approval and rejection workflow
 - Asset issue, return, and overdue allocation tracking
+- Member return request option with admin and user email notifications
 - QR-code based asset scan simulation
 - Asset health reports and damaged/maintenance state handling
 - In-app notifications
@@ -293,7 +294,8 @@ Member workflow:
 3. Select an asset, quantity, start date, end date, and purpose.
 4. Submit a booking request.
 5. Track booking status and notifications.
-6. Return issued assets after use.
+6. Request return for issued assets when ready.
+7. Return issued assets at the council desk for admin check-in.
 
 Admin workflow:
 
