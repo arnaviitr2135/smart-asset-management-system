@@ -589,6 +589,11 @@ export async function requestReturnAsset(req: AuthenticatedRequest, res: Respons
     });
   } catch (error: any) {
     console.error('Error requesting asset return:', error);
+    if (error?.code === 'P2021') {
+      return res.status(503).json({
+        error: 'Return requests are being initialized. Please redeploy the backend or run npx prisma db push, then try again.',
+      });
+    }
     res.status(400).json({ error: error.message || 'Return request failed' });
   }
 }
@@ -710,6 +715,11 @@ export async function respondToReturnRequest(req: AuthenticatedRequest, res: Res
     res.json(updatedRequest);
   } catch (error: any) {
     console.error('Error responding to return request:', error);
+    if (error?.code === 'P2021') {
+      return res.status(503).json({
+        error: 'Return requests are being initialized. Please redeploy the backend or run npx prisma db push, then try again.',
+      });
+    }
     res.status(400).json({ error: error.message || 'Return request response failed' });
   }
 }
