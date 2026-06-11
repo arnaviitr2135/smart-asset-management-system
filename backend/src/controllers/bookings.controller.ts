@@ -349,9 +349,17 @@ export async function issueAsset(req: AuthenticatedRequest, res: Response) {
 
     await createNotification(
       result.userId,
-      'Asset Handed Over / Issued',
-      `You have been issued ${result.quantity}x "${result.asset.name}". Return is scheduled on or before ${result.dueDate.toLocaleDateString()}.`,
-      'RETURN_DEADLINE'
+      'Handover Complete - Asset Issued',
+      `The council desk has handed over <strong>${result.quantity}x "${result.asset.name}"</strong> to you. Return is scheduled on or before <strong>${result.dueDate.toLocaleDateString()}</strong>. You can request return from Bookings & Loans when you are ready to give it back.`,
+      'RETURN_DEADLINE',
+      { label: 'ISSUED', color: '#2563eb' }
+    );
+
+    await notifyAdmins(
+      'Asset Handover Completed',
+      `Admin <strong>${req.user!.email}</strong> issued <strong>${result.quantity}x "${result.asset.name}"</strong> to <strong>${result.user.fullName}</strong> (${result.user.email}).<br/><br/>Due date: <strong>${result.dueDate.toLocaleDateString()}</strong>.`,
+      'RETURN_DEADLINE',
+      { label: 'ISSUED', color: '#2563eb' }
     );
 
     res.status(201).json(result);

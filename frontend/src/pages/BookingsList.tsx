@@ -150,12 +150,30 @@ const BookingsList: React.FC = () => {
                   </div>
                 </div>
 
+                {booking.status === 'APPROVED' && !hasAllocation && (
+                  <div className="border-t border-dark-850/50 pt-3.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-300">
+                          Approved, Awaiting Handover
+                        </span>
+                        <p className="mt-1 text-dark-200">
+                          Visit the council desk to collect this item. Once an admin issues it, your return option will appear here.
+                        </p>
+                      </div>
+                      <span className="inline-flex items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 font-bold text-emerald-300">
+                        Ready for collection
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Asset Allocation status block */}
                 {hasAllocation && (
                   <div className="border-t border-dark-850/50 pt-3.5 flex flex-col gap-2">
                     <span className="text-[10px] text-brand-400 uppercase tracking-widest font-bold flex items-center gap-1">
                       <CornerDownRight className="w-3.5 h-3.5" />
-                      Allocation & Check-out Status
+                      Handover & Loan Status
                     </span>
                     <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-dark-900/20 p-3 rounded-xl border border-dark-850/30">
                       <div>
@@ -167,7 +185,7 @@ const BookingsList: React.FC = () => {
                             ? 'text-red-400 animate-pulse' 
                             : 'text-brand-300'
                         }`}>
-                          {isReturned ? 'Returned' : isOverdue ? 'OVERDUE' : 'Issued (On Loan)'}
+                          {isReturned ? 'Returned' : isOverdue ? 'OVERDUE' : 'Handover Complete (On Loan)'}
                         </span>
                       </div>
 
