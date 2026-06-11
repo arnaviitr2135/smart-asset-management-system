@@ -11,6 +11,11 @@ The platform includes live inventory tracking, booking approvals, issue/return w
 - Backend health check: [https://smart-asset-management-system-oiyh.onrender.com/healthz](https://smart-asset-management-system-oiyh.onrender.com/healthz)
 - Repository: [https://github.com/arnaviitr2135/smart-asset-management-system](https://github.com/arnaviitr2135/smart-asset-management-system)
 
+## Project Resources
+
+- Demo video / project media: [Google Drive folder](https://drive.google.com/drive/folders/1PV-vu7b4DXS4V6kNeXcyorsvDm0tujTG?usp=sharing)
+- Updated project documentation PDF: [docs/CultTrack_AI_Project_Documentation_Updated.pdf](docs/CultTrack_AI_Project_Documentation_Updated.pdf)
+
 ## Features
 
 - User authentication with JWT-based sessions
