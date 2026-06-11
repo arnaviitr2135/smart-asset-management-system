@@ -18,6 +18,9 @@ const AdminDashboard: React.FC = () => {
   const [healthReports, setHealthReports] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState('');
+  const [actionKey, setActionKey] = useState<string | null>(null);
 
   // Asset creation/edit form states
   const [editingAsset, setEditingAsset] = useState<any | null>(null);
@@ -49,62 +52,108 @@ const AdminDashboard: React.FC = () => {
   const [healthError, setHealthError] = useState('');
 
   const refreshAllData = async (showSpinner = true) => {
+    if (showSpinner) {
+      setLoading(true);
+    }
+    setSyncing(true);
+    setSyncError('');
+
     try {
-      if (showSpinner) {
-        setLoading(true);
-      }
-      const [bookingsData, assetsData, allocationsData] = await Promise.all([
+      const [bookingsResult, assetsResult, allocationsResult] = await Promise.allSettled([
         apiFetch('/api/v1/bookings'),
         apiFetch('/api/v1/assets'),
         apiFetch('/api/v1/allocations'),
       ]);
+      const failedSections: string[] = [];
 
-      let returnRequestsData: any[] = [];
-      let healthData: any[] = [];
-      let auditData: any[] = [];
-      try {
-        const data = await apiFetch('/api/v1/allocations/return-requests');
-        returnRequestsData = Array.isArray(data) ? data : [];
-      } catch (err) {
-        console.warn('Return request log is unavailable; continuing with core admin data.', err);
-      }
-      try {
-        const data = await apiFetch('/api/v1/allocations/health');
-        healthData = Array.isArray(data) ? data : [];
-      } catch (err) {
-        console.warn('Health reports are unavailable; continuing with core admin data.', err);
-      }
-      try {
-        const data = await apiFetch('/api/v1/audit');
-        auditData = Array.isArray(data) ? data : [];
-      } catch (err) {
-        console.warn('Audit logs are unavailable; continuing with core admin data.', err);
+      if (bookingsResult.status === 'fulfilled') {
+        setBookings(Array.isArray(bookingsResult.value) ? bookingsResult.value : []);
+      } else {
+        failedSections.push('booking requests');
+        console.error('Failed to refresh bookings', bookingsResult.reason);
       }
 
-      setBookings(Array.isArray(bookingsData) ? bookingsData : []);
-      setAssets(Array.isArray(assetsData) ? assetsData : []);
-      setAllocations(Array.isArray(allocationsData) ? allocationsData : []);
-      setReturnRequests(returnRequestsData);
-      setHealthReports(healthData);
-      setAuditLogs(auditData);
+      if (assetsResult.status === 'fulfilled') {
+        setAssets(Array.isArray(assetsResult.value) ? assetsResult.value : []);
+      } else {
+        failedSections.push('inventory');
+        console.error('Failed to refresh assets', assetsResult.reason);
+      }
+
+      if (allocationsResult.status === 'fulfilled') {
+        setAllocations(Array.isArray(allocationsResult.value) ? allocationsResult.value : []);
+      } else {
+        failedSections.push('active loans');
+        console.error('Failed to refresh allocations', allocationsResult.reason);
+      }
+
+      const [returnRequestsResult, healthResult, auditResult] = await Promise.allSettled([
+        apiFetch('/api/v1/allocations/return-requests'),
+        apiFetch('/api/v1/allocations/health'),
+        apiFetch('/api/v1/audit'),
+      ]);
+
+      if (returnRequestsResult.status === 'fulfilled') {
+        setReturnRequests(Array.isArray(returnRequestsResult.value) ? returnRequestsResult.value : []);
+      } else {
+        failedSections.push('return requests');
+        console.warn('Return request log is unavailable; keeping last synced data.', returnRequestsResult.reason);
+      }
+
+      if (healthResult.status === 'fulfilled') {
+        setHealthReports(Array.isArray(healthResult.value) ? healthResult.value : []);
+      } else {
+        failedSections.push('health logs');
+        console.warn('Health reports are unavailable; keeping last synced data.', healthResult.reason);
+      }
+
+      if (auditResult.status === 'fulfilled') {
+        setAuditLogs(Array.isArray(auditResult.value) ? auditResult.value : []);
+      } else {
+        failedSections.push('audit logs');
+        console.warn('Audit logs are unavailable; keeping last synced data.', auditResult.reason);
+      }
+
+      if (failedSections.length > 0) {
+        setSyncError(`Could not refresh ${failedSections.join(', ')}. Showing the last synced data.`);
+      }
     } catch (err) {
       console.error('Failed to sync administrative dashboard datasets', err);
-      setBookings([]);
-      setAssets([]);
-      setAllocations([]);
-      setReturnRequests([]);
-      setHealthReports([]);
-      setAuditLogs([]);
+      setSyncError('Could not reach the backend. Showing the last synced data.');
     } finally {
       if (showSpinner) {
         setLoading(false);
       }
+      setSyncing(false);
     }
   };
 
   useEffect(() => {
     refreshAllData();
+    const intervalId = window.setInterval(() => refreshAllData(false), 15000);
+    const handleFocus = () => refreshAllData(false);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
+
+  const runSyncedAction = async (key: string, action: () => Promise<void>, fallbackMessage: string) => {
+    if (actionKey) return;
+
+    try {
+      setActionKey(key);
+      setSyncError('');
+      await action();
+      await refreshAllData(false);
+    } catch (err: any) {
+      setSyncError(err.message || fallbackMessage);
+    } finally {
+      setActionKey(null);
+    }
+  };
 
   // Render QR Code canvas
   useEffect(() => {
@@ -117,70 +166,135 @@ const AdminDashboard: React.FC = () => {
 
   // Request approval logic
   const handleApproveBooking = async (id: string) => {
-    try {
-      await apiFetch(`/api/v1/bookings/${id}/approve`, { method: 'PUT' });
-      void refreshAllData(false);
-    } catch (err: any) {
-      alert(err.message || 'Approval failed');
-    }
+    await runSyncedAction(
+      `approve-${id}`,
+      () => apiFetch(`/api/v1/bookings/${id}/approve`, { method: 'PUT' }),
+      'Approval failed'
+    );
   };
 
   const handleRejectBooking = async (id: string) => {
-    try {
-      await apiFetch(`/api/v1/bookings/${id}/reject`, { method: 'PUT' });
-      void refreshAllData(false);
-    } catch (err: any) {
-      alert(err.message || 'Rejection failed');
-    }
+    await runSyncedAction(
+      `reject-${id}`,
+      () => apiFetch(`/api/v1/bookings/${id}/reject`, { method: 'PUT' }),
+      'Rejection failed'
+    );
   };
 
   const handleIssueAsset = async (bookingId: string) => {
-    try {
-      await apiFetch('/api/v1/allocations/issue', {
+    await runSyncedAction(
+      `issue-${bookingId}`,
+      () => apiFetch('/api/v1/allocations/issue', {
         method: 'POST',
         body: JSON.stringify({ bookingId }),
-      });
-      void refreshAllData(false);
-    } catch (err: any) {
-      alert(err.message || 'Failed to issue asset');
-    }
+      }),
+      'Failed to issue asset'
+    );
   };
 
   const handleRequestReturnFromUser = async (allocation: any) => {
     const notes = window.prompt(`Send return request to ${allocation.user.fullName}? Add optional notes for the user.`);
     if (notes === null) return;
 
-    try {
-      await apiFetch('/api/v1/allocations/request-return', {
+    await runSyncedAction(
+      `request-return-${allocation.id}`,
+      () => apiFetch('/api/v1/allocations/request-return', {
         method: 'POST',
         body: JSON.stringify({
           allocationId: allocation.id,
           notes,
         }),
-      });
-      void refreshAllData(false);
-    } catch (err: any) {
-      alert(err.message || 'Failed to send return request');
-    }
+      }),
+      'Failed to send return request'
+    );
   };
 
   const handleReturnAssetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedAllocationForReturn) return;
+
+    await runSyncedAction(
+      `return-${selectedAllocationForReturn.id}`,
+      async () => {
+        await apiFetch('/api/v1/allocations/return', {
+          method: 'POST',
+          body: JSON.stringify({
+            allocationId: selectedAllocationForReturn.id,
+            conditionOnReturn: returnCondition,
+            notes: returnNotes,
+          }),
+        });
+        setSelectedAllocationForReturn(null);
+        setReturnNotes('');
+      },
+      'Return failed'
+    );
+  };
+
+  const handleAssetFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAssetFormError('');
+
+    const path = editingAsset ? `/api/v1/assets/${editingAsset.id}` : '/api/v1/assets';
+    const method = editingAsset ? 'PUT' : 'POST';
+
+    await runSyncedAction(
+      editingAsset ? `asset-update-${editingAsset.id}` : 'asset-create',
+      async () => {
+        await apiFetch(path, {
+          method,
+          body: JSON.stringify(assetForm),
+        });
+        setShowAssetModal(false);
+      },
+      'Asset operation failed'
+    );
+  };
+
+  const handleDeleteAsset = async (id: string) => {
+    if (!confirm('Are you sure you want to permanently delete this asset?')) return;
+
+    await runSyncedAction(
+      `asset-delete-${id}`,
+      () => apiFetch(`/api/v1/assets/${id}`, { method: 'DELETE' }),
+      'Failed to delete asset'
+    );
+  };
+
+  // QR Scanning Simulator
+  const handleSimulateScan = async () => {
+    if (!qrAssetId) return;
     try {
-      await apiFetch('/api/v1/allocations/return', {
-        method: 'POST',
-        body: JSON.stringify({
-          allocationId: selectedAllocationForReturn.id,
-          conditionOnReturn: returnCondition,
-          notes: returnNotes,
-        }),
-      });
-      setSelectedAllocationForReturn(null);
-      setReturnNotes('');
-      void refreshAllData(false);
-    } catch (err: any) {
-      alert(err.message || 'Return failed');
+      const asset = await apiFetch(`/api/v1/assets/${qrAssetId}`);
+      setQrScannedAsset(asset);
+    } catch (err) {
+      alert('Invalid QR Code or Asset Not Found');
+      setQrScannedAsset(null);
     }
+  };
+
+  // Health report creation
+  const handleHealthReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setHealthError('');
+    if (!healthAssetId) return;
+
+    await runSyncedAction(
+      'health-create',
+      async () => {
+        await apiFetch('/api/v1/allocations/health', {
+          method: 'POST',
+          body: JSON.stringify({
+            assetId: healthAssetId,
+            condition: healthCondition,
+            notes: healthNotes,
+          }),
+        });
+        setHealthNotes('');
+        setHealthAssetId('');
+      },
+      'Failed to create health report'
+    );
   };
 
   // Asset CRUD logic
@@ -210,71 +324,15 @@ const AdminDashboard: React.FC = () => {
     setShowAssetModal(true);
   };
 
-  const handleAssetFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAssetFormError('');
+  /*
+   * Kept below helpers close to the render so the UI can use one consistent view of
+   * active requests even if the server adds more terminal statuses later.
+   */
+  const activeReturnRequests = returnRequests.filter(request =>
+    ['PENDING', 'USER_CONFIRMED'].includes(request.status)
+  );
 
-    try {
-      const path = editingAsset ? `/api/v1/assets/${editingAsset.id}` : '/api/v1/assets';
-      const method = editingAsset ? 'PUT' : 'POST';
-
-      await apiFetch(path, {
-        method,
-        body: JSON.stringify(assetForm),
-      });
-
-      setShowAssetModal(false);
-      void refreshAllData(false);
-    } catch (err: any) {
-      setAssetFormError(err.message || 'Asset operation failed');
-    }
-  };
-
-  const handleDeleteAsset = async (id: string) => {
-    if (!confirm('Are you sure you want to permanently delete this asset?')) return;
-    try {
-      await apiFetch(`/api/v1/assets/${id}`, { method: 'DELETE' });
-      void refreshAllData(false);
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete asset');
-    }
-  };
-
-  // QR Scanning Simulator
-  const handleSimulateScan = async () => {
-    if (!qrAssetId) return;
-    try {
-      const asset = await apiFetch(`/api/v1/assets/${qrAssetId}`);
-      setQrScannedAsset(asset);
-    } catch (err) {
-      alert('Invalid QR Code or Asset Not Found');
-      setQrScannedAsset(null);
-    }
-  };
-
-  // Health report creation
-  const handleHealthReportSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setHealthError('');
-    if (!healthAssetId) return;
-
-    try {
-      await apiFetch('/api/v1/allocations/health', {
-        method: 'POST',
-        body: JSON.stringify({
-          assetId: healthAssetId,
-          condition: healthCondition,
-          notes: healthNotes,
-        }),
-      });
-
-      setHealthNotes('');
-      setHealthAssetId('');
-      void refreshAllData(false);
-    } catch (err: any) {
-      setHealthError(err.message || 'Failed to create health report');
-    }
-  };
+  const outstandingAllocations = allocations.filter(allocation => allocation.status === 'ISSUED');
 
   return (
     <div className="space-y-6">
@@ -286,11 +344,19 @@ const AdminDashboard: React.FC = () => {
         </div>
         <button
           onClick={() => refreshAllData()}
-          className="p-2 rounded-lg bg-dark-900 border border-dark-800 text-dark-300 hover:text-white transition-colors"
+          disabled={syncing}
+          className="p-2 rounded-lg bg-dark-900 border border-dark-800 text-dark-300 hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          title="Refresh admin data"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
         </button>
       </div>
+
+      {syncError && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs font-medium text-amber-200">
+          {syncError}
+        </div>
+      )}
 
       {/* Admin Tab Selectors */}
       <div className="flex border-b border-dark-800/80 gap-1 overflow-x-auto pb-px">
@@ -402,14 +468,16 @@ const AdminDashboard: React.FC = () => {
                               <div className="flex justify-end gap-1.5">
                                 <button
                                   onClick={() => handleApproveBooking(booking.id)}
-                                  className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20"
+                                  disabled={!!actionKey}
+                                  className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                                   title="Approve"
                                 >
                                   <Check className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleRejectBooking(booking.id)}
-                                  className="p-1.5 rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20"
+                                  disabled={!!actionKey}
+                                  className="p-1.5 rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                                   title="Reject"
                                 >
                                   <X className="w-4 h-4" />
@@ -460,9 +528,10 @@ const AdminDashboard: React.FC = () => {
                             <td className="py-4 px-2 text-right">
                               <button
                                 onClick={() => handleIssueAsset(booking.id)}
-                                className="px-3 py-1.5 rounded-lg bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 border border-brand-500/20 font-semibold"
+                                disabled={!!actionKey}
+                                className="px-3 py-1.5 rounded-lg bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 border border-brand-500/20 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                Handover / Issue
+                                {actionKey === `issue-${booking.id}` ? 'Issuing...' : 'Handover / Issue'}
                               </button>
                             </td>
                           </tr>
@@ -643,17 +712,15 @@ const AdminDashboard: React.FC = () => {
               <div className="glass-panel p-5 rounded-2xl border border-dark-850">
                 <h3 className="font-bold text-sm text-dark-200 mb-4">Active Outstanding Loans</h3>
 
-                {allocations.filter(a => a.status === 'ISSUED').length === 0 ? (
+                {outstandingAllocations.length === 0 ? (
                   <p className="text-xs text-dark-400 text-center py-6">No assets checked out currently.</p>
                 ) : (
                   <div className="overflow-y-auto max-h-[300px]">
                     <div className="space-y-2">
-                      {allocations.filter(a => a.status === 'ISSUED').map(allocation => {
+                      {outstandingAllocations.map(allocation => {
                         const isOverdue = new Date(allocation.dueDate) < new Date();
-                        const activeReturnRequest = returnRequests.find(request =>
-                          request.allocationId === allocation.id &&
-                          ['PENDING', 'USER_CONFIRMED'].includes(request.status)
-                        );
+                        const activeReturnRequest = activeReturnRequests.find(request => request.allocationId === allocation.id);
+                        const requestActionKey = `request-return-${allocation.id}`;
                         return (
                           <div 
                             key={allocation.id}
@@ -677,17 +744,18 @@ const AdminDashboard: React.FC = () => {
                             <div className="flex flex-wrap justify-end gap-2">
                               <button
                                 onClick={() => handleRequestReturnFromUser(allocation)}
-                                disabled={!!activeReturnRequest}
+                                disabled={!!activeReturnRequest || !!actionKey}
                                 className="px-2.5 py-1 rounded bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/20 font-semibold shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                {activeReturnRequest ? 'Request Sent' : 'Request Return'}
+                                {actionKey === requestActionKey ? 'Sending...' : activeReturnRequest ? 'Request Sent' : 'Request Return'}
                               </button>
                               <button
                                 onClick={() => {
                                   setSelectedAllocationForReturn(allocation);
                                   setReturnCondition('GOOD');
                                 }}
-                                className="px-2.5 py-1 rounded bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 border border-brand-500/20 font-semibold shrink-0"
+                                disabled={!!actionKey}
+                                className="px-2.5 py-1 rounded bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 border border-brand-500/20 font-semibold shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 Check-in / Return
                               </button>
@@ -703,12 +771,11 @@ const AdminDashboard: React.FC = () => {
               <div className="glass-panel p-5 rounded-2xl border border-dark-850">
                 <h3 className="font-bold text-sm text-dark-200 mb-4">Return Request Log</h3>
 
-                {returnRequests.filter(request => request.status !== 'COMPLETED').length === 0 ? (
+                {activeReturnRequests.length === 0 ? (
                   <p className="text-xs text-dark-400 text-center py-6">No active return requests.</p>
                 ) : (
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {returnRequests
-                      .filter(request => request.status !== 'COMPLETED')
+                    {activeReturnRequests
                       .map(request => (
                         <div key={request.id} className="rounded-xl border border-dark-850 bg-dark-900/30 p-3 text-xs">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -954,15 +1021,17 @@ const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSelectedAllocationForReturn(null)}
-                  className="w-1/2 py-2 rounded-lg text-xs font-semibold btn-secondary"
+                  disabled={!!actionKey}
+                  className="w-1/2 py-2 rounded-lg text-xs font-semibold btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="w-1/2 py-2 rounded-lg text-xs font-semibold btn-primary text-white"
+                  disabled={!!actionKey}
+                  className="w-1/2 py-2 rounded-lg text-xs font-semibold btn-primary text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Submit Check-in
+                  {actionKey === `return-${selectedAllocationForReturn.id}` ? 'Saving...' : 'Submit Check-in'}
                 </button>
               </div>
             </form>

@@ -42,9 +42,11 @@ const Catalog: React.FC = () => {
   const [bookingWaitMessage, setBookingWaitMessage] = useState('');
   const bookingRequestIdRef = useRef(0);
 
-  const fetchAssets = async () => {
+  const fetchAssets = async (showSpinner = true) => {
     try {
-      setLoading(true);
+      if (showSpinner) {
+        setLoading(true);
+      }
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       if (selectedCategory) params.append('category', selectedCategory);
@@ -55,12 +57,22 @@ const Catalog: React.FC = () => {
       console.error('Error fetching assets', err);
       setAssets([]);
     } finally {
-      setLoading(false);
+      if (showSpinner) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     fetchAssets();
+    const intervalId = window.setInterval(() => fetchAssets(false), 15000);
+    const handleFocus = () => fetchAssets(false);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [search, selectedCategory]);
 
   const totalItems = assets.reduce((sum, asset) => sum + (asset.totalQuantity || 0), 0);
@@ -133,7 +145,7 @@ const Catalog: React.FC = () => {
 
       if (bookingRequestIdRef.current !== requestId) return;
       setBookingSuccess('Booking request submitted successfully! Pending admin approval.');
-      void fetchAssets(); // Refresh counts without blocking the success state
+      void fetchAssets(false); // Refresh counts without blocking the success state
       setTimeout(() => {
         if (bookingRequestIdRef.current === requestId) {
           setSelectedAsset(null);

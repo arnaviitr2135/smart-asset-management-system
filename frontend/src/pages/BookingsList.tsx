@@ -7,33 +7,89 @@ const BookingsList: React.FC = () => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [returnRequests, setReturnRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [returningIds, setReturningIds] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
 
-  const fetchBookings = async () => {
-    try {
-      setLoading(true);
-      const bookingsData = await apiFetch('/api/v1/bookings');
-      let returnRequestsData: any[] = [];
-      try {
-        const data = await apiFetch('/api/v1/allocations/return-requests');
-        returnRequestsData = Array.isArray(data) ? data : [];
-      } catch (err) {
-        console.warn('Return request log is unavailable; continuing with booking data.', err);
+  const mergeBookingAllocations = (bookingsData: any[], allocationsData: any[], returnRequestsData: any[]) => {
+    const allocationByBookingId = new Map<string, any>();
+
+    allocationsData.forEach((allocation) => {
+      if (allocation?.bookingId) {
+        allocationByBookingId.set(allocation.bookingId, allocation);
       }
-      setBookings(Array.isArray(bookingsData) ? bookingsData : []);
+    });
+
+    returnRequestsData.forEach((request) => {
+      const allocation = request?.allocation;
+      if (allocation?.bookingId) {
+        allocationByBookingId.set(allocation.bookingId, allocation);
+      }
+    });
+
+    return bookingsData.map((booking) => ({
+      ...booking,
+      allocation: allocationByBookingId.get(booking.id) || booking.allocation,
+    }));
+  };
+
+  const fetchBookings = async (showSpinner = true) => {
+    if (showSpinner) {
+      setLoading(true);
+    }
+    setSyncing(true);
+
+    try {
+      const [bookingsResult, allocationsResult, returnRequestsResult] = await Promise.allSettled([
+        apiFetch('/api/v1/bookings'),
+        apiFetch('/api/v1/allocations'),
+        apiFetch('/api/v1/allocations/return-requests'),
+      ]);
+
+      if (bookingsResult.status !== 'fulfilled') {
+        throw bookingsResult.reason;
+      }
+
+      const bookingsData = Array.isArray(bookingsResult.value) ? bookingsResult.value : [];
+      const allocationsData =
+        allocationsResult.status === 'fulfilled' && Array.isArray(allocationsResult.value)
+          ? allocationsResult.value
+          : [];
+      const returnRequestsData =
+        returnRequestsResult.status === 'fulfilled' && Array.isArray(returnRequestsResult.value)
+          ? returnRequestsResult.value
+          : [];
+
+      if (allocationsResult.status !== 'fulfilled') {
+        console.warn('Allocation status is unavailable; continuing with booking data.', allocationsResult.reason);
+      }
+      if (returnRequestsResult.status !== 'fulfilled') {
+        console.warn('Return request log is unavailable; continuing with booking data.', returnRequestsResult.reason);
+      }
+
+      setBookings(mergeBookingAllocations(bookingsData, allocationsData, returnRequestsData));
       setReturnRequests(returnRequestsData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching user bookings', err);
-      setBookings([]);
-      setReturnRequests([]);
+      setNotice(err.message || 'Could not refresh your borrowing board. Showing the last synced data.');
     } finally {
-      setLoading(false);
+      if (showSpinner) {
+        setLoading(false);
+      }
+      setSyncing(false);
     }
   };
 
   useEffect(() => {
     fetchBookings();
+    const intervalId = window.setInterval(() => fetchBookings(false), 15000);
+    const handleFocus = () => fetchBookings(false);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const handleRequestReturn = async (allocation: any) => {
@@ -51,7 +107,7 @@ const BookingsList: React.FC = () => {
         }),
       });
       setNotice('Return request sent to the admin desk. Please bring the item for check-in verification.');
-      await fetchBookings();
+      await fetchBookings(false);
     } catch (err: any) {
       setNotice(err.message || 'Return request failed. Please try again.');
     } finally {
@@ -75,7 +131,7 @@ const BookingsList: React.FC = () => {
         body: JSON.stringify({ responseNotes }),
       });
       setNotice('Return completed. Inventory has been updated and this item is now marked returned.');
-      await fetchBookings();
+      await fetchBookings(false);
     } catch (err: any) {
       setNotice(err.message || 'Return confirmation failed. Please try again.');
     } finally {
@@ -92,6 +148,10 @@ const BookingsList: React.FC = () => {
       request.allocationId === allocationId &&
       ['PENDING', 'USER_CONFIRMED'].includes(request.status)
     );
+
+  const visibleReturnRequests = returnRequests.filter((request) =>
+    ['PENDING', 'USER_CONFIRMED'].includes(request.status)
+  );
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -121,9 +181,16 @@ const BookingsList: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold font-sans">My Borrowing Board</h2>
-        <p className="text-sm text-dark-400">Track current loan requests, active assets, and due dates.</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold font-sans">My Borrowing Board</h2>
+          <p className="text-sm text-dark-400">Track current loan requests, active assets, and due dates.</p>
+        </div>
+        {syncing && !loading && (
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-brand-300">
+            Syncing...
+          </span>
+        )}
       </div>
 
       {notice && (
@@ -132,7 +199,7 @@ const BookingsList: React.FC = () => {
         </div>
       )}
 
-      {returnRequests.filter((request) => request.status !== 'COMPLETED').length > 0 && (
+      {visibleReturnRequests.length > 0 && (
         <div className="glass-panel rounded-2xl border border-dark-850 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -141,8 +208,7 @@ const BookingsList: React.FC = () => {
             </div>
           </div>
           <div className="space-y-2">
-            {returnRequests
-              .filter((request) => request.status !== 'COMPLETED')
+            {visibleReturnRequests
               .map((request) => {
                 const isAdminRequest = request.source === 'ADMIN';
                 const canConfirm = request.status === 'PENDING';
