@@ -53,19 +53,26 @@ const AdminDashboard: React.FC = () => {
       if (showSpinner) {
         setLoading(true);
       }
-      const [bookingsData, assetsData, allocationsData, returnRequestsData, healthData, auditData] = await Promise.all([
+      const [bookingsData, assetsData, allocationsData, healthData, auditData] = await Promise.all([
         apiFetch('/api/v1/bookings'),
         apiFetch('/api/v1/assets'),
         apiFetch('/api/v1/allocations'),
-        apiFetch('/api/v1/allocations/return-requests'),
         apiFetch('/api/v1/allocations/health'),
         apiFetch('/api/v1/audit'),
       ]);
 
+      let returnRequestsData: any[] = [];
+      try {
+        const data = await apiFetch('/api/v1/allocations/return-requests');
+        returnRequestsData = Array.isArray(data) ? data : [];
+      } catch (err) {
+        console.warn('Return request log is unavailable; continuing with core admin data.', err);
+      }
+
       setBookings(Array.isArray(bookingsData) ? bookingsData : []);
       setAssets(Array.isArray(assetsData) ? assetsData : []);
       setAllocations(Array.isArray(allocationsData) ? allocationsData : []);
-      setReturnRequests(Array.isArray(returnRequestsData) ? returnRequestsData : []);
+      setReturnRequests(returnRequestsData);
       setHealthReports(Array.isArray(healthData) ? healthData : []);
       setAuditLogs(Array.isArray(auditData) ? auditData : []);
     } catch (err) {

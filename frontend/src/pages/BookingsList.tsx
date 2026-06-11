@@ -13,12 +13,16 @@ const BookingsList: React.FC = () => {
   const fetchBookings = async () => {
     try {
       setLoading(true);
-      const [bookingsData, returnRequestsData] = await Promise.all([
-        apiFetch('/api/v1/bookings'),
-        apiFetch('/api/v1/allocations/return-requests'),
-      ]);
+      const bookingsData = await apiFetch('/api/v1/bookings');
+      let returnRequestsData: any[] = [];
+      try {
+        const data = await apiFetch('/api/v1/allocations/return-requests');
+        returnRequestsData = Array.isArray(data) ? data : [];
+      } catch (err) {
+        console.warn('Return request log is unavailable; continuing with booking data.', err);
+      }
       setBookings(Array.isArray(bookingsData) ? bookingsData : []);
-      setReturnRequests(Array.isArray(returnRequestsData) ? returnRequestsData : []);
+      setReturnRequests(returnRequestsData);
     } catch (err) {
       console.error('Error fetching user bookings', err);
       setBookings([]);

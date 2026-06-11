@@ -622,6 +622,9 @@ export async function getReturnRequests(req: AuthenticatedRequest, res: Response
     res.json(requests);
   } catch (error) {
     console.error('Error fetching return requests:', error);
+    if ((error as any)?.code === 'P2021') {
+      return res.json([]);
+    }
     res.status(500).json({ error: 'Failed to fetch return requests' });
   }
 }
