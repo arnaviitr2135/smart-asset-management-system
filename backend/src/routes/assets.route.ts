@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { getAssets, getAssetById, createAsset, updateAsset, deleteAsset } from '../controllers/assets.controller';
+import { getAssets, getAssetById, getAssetAvailability, createAsset, updateAsset, deleteAsset } from '../controllers/assets.controller';
 import { authenticateJWT, requireAdmin } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.get('/', authenticateJWT, getAssets);
+router.get('/:id/availability', authenticateJWT, getAssetAvailability);
 router.get('/:id', authenticateJWT, getAssetById);
 router.post('/', authenticateJWT, requireAdmin, createAsset);
 router.put('/:id', authenticateJWT, requireAdmin, updateAsset);

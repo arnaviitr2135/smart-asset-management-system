@@ -23,6 +23,15 @@ const CATEGORIES = [
   { value: 'INFRA', label: 'Event Infrastructure' },
 ];
 
+type AvailabilitySnapshot = {
+  assetId: string;
+  totalQuantity: number;
+  currentAvailable: number;
+  reservedForDates: number;
+  dateAvailable: number;
+  available: number;
+};
+
 const Catalog: React.FC = () => {
   const { apiFetch } = useAuth();
   const [assets, setAssets] = useState<any[]>([]);
@@ -40,6 +49,8 @@ const Catalog: React.FC = () => {
   const [bookingSuccess, setBookingSuccess] = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingWaitMessage, setBookingWaitMessage] = useState('');
+  const [bookingAvailability, setBookingAvailability] = useState<AvailabilitySnapshot | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const bookingRequestIdRef = useRef(0);
 
   const fetchAssets = async (showSpinner = true) => {
@@ -95,8 +106,46 @@ const Catalog: React.FC = () => {
     setBookingError('');
     setBookingSuccess('');
     setBookingWaitMessage('');
+    setBookingAvailability(null);
+    setAvailabilityLoading(false);
     bookingRequestIdRef.current += 1;
   };
+
+  useEffect(() => {
+    if (!selectedAsset || !startDate || !endDate) {
+      setBookingAvailability(null);
+      setAvailabilityLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const params = new URLSearchParams({ startDate, endDate });
+    setAvailabilityLoading(true);
+
+    apiFetch(`/api/v1/assets/${selectedAsset.id}/availability?${params.toString()}`)
+      .then((data) => {
+        if (cancelled) return;
+        const availability = data as AvailabilitySnapshot;
+        setBookingAvailability(availability);
+        if (availability.available > 0) {
+          setBookingQty((current) => Math.min(Math.max(current, 1), availability.available));
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('Date availability check failed; falling back to shelf count.', err);
+        setBookingAvailability(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAvailabilityLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAsset?.id, startDate, endDate]);
 
   useEffect(() => {
     if (!bookingLoading) {
@@ -113,6 +162,22 @@ const Catalog: React.FC = () => {
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedAsset) return;
+
+    const availableForSelectedDates = bookingAvailability?.available ?? selectedAsset.quantityAvailable;
+    if (availabilityLoading) {
+      setBookingError('Still checking availability for the selected dates. Please try again in a moment.');
+      return;
+    }
+    if (availableForSelectedDates <= 0) {
+      setBookingError('No units are available for the selected dates.');
+      return;
+    }
+    if (bookingQty > availableForSelectedDates) {
+      setBookingError(`Only ${availableForSelectedDates} unit(s) are available for the selected dates.`);
+      return;
+    }
+
     const requestId = bookingRequestIdRef.current + 1;
     bookingRequestIdRef.current = requestId;
     const controller = new AbortController();
@@ -165,6 +230,10 @@ const Catalog: React.FC = () => {
       }
     }
   };
+
+  const modalAvailable = bookingAvailability?.available ?? selectedAsset?.quantityAvailable ?? 0;
+  const modalMaxInput = Math.max(modalAvailable, 1);
+  const canSubmitBooking = !bookingLoading && !availabilityLoading && modalAvailable > 0;
 
   return (
     <div className="space-y-6">
@@ -340,15 +409,23 @@ const Catalog: React.FC = () => {
                 {/* Quantity */}
                 <div>
                   <label className="block text-xs font-medium text-dark-300 mb-1">
-                    Quantity Required (Max available: {selectedAsset.quantityAvailable})
+                    Quantity Required (Available for selected dates: {availabilityLoading ? 'Checking...' : modalAvailable})
                   </label>
+                  {bookingAvailability && (
+                    <p className="mb-2 text-[11px] text-dark-400">
+                      Shelf count: {bookingAvailability.currentAvailable}/{bookingAvailability.totalQuantity} - Date reservations: {bookingAvailability.reservedForDates}
+                    </p>
+                  )}
                   <input
                     type="number"
                     min="1"
-                    max={selectedAsset.quantityAvailable}
+                    max={modalMaxInput}
                     required
                     value={bookingQty}
-                    onChange={(e) => setBookingQty(parseInt(e.target.value) || 1)}
+                    onChange={(e) => {
+                      const nextQty = parseInt(e.target.value, 10) || 1;
+                      setBookingQty(Math.min(Math.max(nextQty, 1), modalMaxInput));
+                    }}
                     className="w-full px-3 py-2 rounded-lg glass-input text-xs"
                   />
                 </div>
@@ -404,10 +481,16 @@ const Catalog: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={bookingLoading}
+                    disabled={!canSubmitBooking}
                     className="w-1/2 py-2 rounded-lg text-xs font-semibold btn-primary text-white"
                   >
-                    {bookingLoading ? 'Submitting...' : 'Request Loan'}
+                    {bookingLoading
+                      ? 'Submitting...'
+                      : availabilityLoading
+                      ? 'Checking...'
+                      : modalAvailable <= 0
+                      ? 'Unavailable'
+                      : 'Request Loan'}
                   </button>
                 </div>
               </form>

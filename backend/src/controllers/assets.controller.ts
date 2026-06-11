@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { PrismaClient, AssetCategory, AssetStatus } from '@prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { logAudit } from '../services/notification.service';
+import { calculateAssetAvailability } from '../services/availability.service';
 
 const prisma = new PrismaClient();
 const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
@@ -58,6 +59,45 @@ export async function getAssetById(req: AuthenticatedRequest, res: Response) {
   } catch (error) {
     console.error('Error fetching asset by ID:', error);
     res.status(500).json({ error: 'Failed to fetch asset' });
+  }
+}
+
+export async function getAssetAvailability(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Start date and end date are required' });
+    }
+
+    const start = new Date(String(startDate));
+    const end = new Date(String(endDate));
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ error: 'Invalid dates provided' });
+    }
+
+    if (start >= end) {
+      return res.status(400).json({ error: 'Start date must be before end date' });
+    }
+
+    const availability = await calculateAssetAvailability(prisma, id, start, end);
+    if (!availability) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+
+    res.json({
+      assetId: id,
+      totalQuantity: availability.asset.totalQuantity,
+      currentAvailable: availability.currentAvailable,
+      reservedForDates: availability.reservedForDates,
+      dateAvailable: availability.dateAvailable,
+      available: availability.available,
+    });
+  } catch (error) {
+    console.error('Error fetching asset availability:', error);
+    res.status(500).json({ error: 'Failed to fetch asset availability' });
   }
 }
 

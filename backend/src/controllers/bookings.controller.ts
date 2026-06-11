@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { createNotification, notifyAdmins, logAudit } from '../services/notification.service';
+import { calculateAssetAvailability } from '../services/availability.service';
 
 const prisma = new PrismaClient();
 
@@ -44,45 +45,21 @@ export async function createBooking(req: AuthenticatedRequest, res: Response) {
 
     // Wrap inventory check & booking creation in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Fetch asset details
-      const asset = await tx.asset.findUnique({ where: { id: assetId } });
-      if (!asset) {
+      // 1. Fetch asset details and date-aware availability.
+      const availability = await calculateAssetAvailability(tx, assetId, start, end);
+      if (!availability) {
         throw new Error('Asset not found');
       }
+      const { asset } = availability;
 
       if (asset.status === AssetStatus.DAMAGED) {
         throw new Error('Asset is currently marked as damaged and unavailable');
       }
 
-      // 2. Check for overlapping APPROVED bookings or ACTIVE allocations during this duration
-      const overlappingBookings = await tx.booking.findMany({
-        where: {
-          assetId,
-          status: BookingStatus.APPROVED,
-          OR: [
-            { startDate: { lte: end }, endDate: { gte: start } }
-          ]
-        }
-      });
-
-      const overlappingAllocations = await tx.allocation.findMany({
-        where: {
-          assetId,
-          status: AllocationStatus.ISSUED,
-          booking: {
-            OR: [
-              { startDate: { lte: end }, endDate: { gte: start } }
-            ]
-          }
-        }
-      });
-
-      const activeBookedQty = overlappingBookings.reduce((sum, b) => sum + b.quantity, 0);
-      const activeAllocatedQty = overlappingAllocations.reduce((sum, a) => sum + a.quantity, 0);
-      const totalReserved = activeBookedQty + activeAllocatedQty;
-
-      if (totalReserved + qty > asset.totalQuantity) {
-        throw new Error(`Inventory exhausted for requested dates. Only ${asset.totalQuantity - totalReserved} items available.`);
+      // 2. Approved bookings already represent reserved stock. Issued allocations are
+      // tied to those bookings, so counting both would double-count the same loan.
+      if (qty > availability.dateAvailable) {
+        throw new Error(`Inventory exhausted for requested dates. Only ${availability.dateAvailable} items available.`);
       }
 
       // 3. Check current immediate stock availability
