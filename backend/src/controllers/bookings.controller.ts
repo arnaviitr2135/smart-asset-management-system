@@ -672,47 +672,88 @@ export async function respondToReturnRequest(req: AuthenticatedRequest, res: Res
     }
 
     const trimmedNotes = typeof responseNotes === 'string' ? responseNotes.trim() : '';
-    const updatedRequest = await prisma.returnRequest.update({
-      where: { id },
-      data: {
-        status: ReturnRequestStatus.USER_CONFIRMED,
-        responseNotes: trimmedNotes || null,
-        respondedAt: new Date(),
-      },
-      include: {
-        allocation: {
-          include: {
-            asset: true,
-            user: {
-              select: { id: true, email: true, fullName: true },
+    const completedRequest = await prisma.$transaction(async (tx) => {
+      await tx.return.create({
+        data: {
+          allocationId: returnRequest.allocationId,
+          receivedById: userId,
+          conditionOnReturn: Condition.GOOD,
+          notes: trimmedNotes || 'Returned by user confirmation.',
+        },
+      });
+
+      await tx.asset.update({
+        where: { id: returnRequest.allocation.assetId },
+        data: {
+          quantityAvailable: {
+            increment: returnRequest.allocation.quantity,
+          },
+        },
+      });
+
+      await tx.allocation.update({
+        where: { id: returnRequest.allocationId },
+        data: { status: AllocationStatus.RETURNED },
+      });
+
+      await tx.returnRequest.updateMany({
+        where: {
+          allocationId: returnRequest.allocationId,
+          id: { not: id },
+          status: {
+            in: [ReturnRequestStatus.PENDING, ReturnRequestStatus.USER_CONFIRMED],
+          },
+        },
+        data: {
+          status: ReturnRequestStatus.COMPLETED,
+          completedAt: new Date(),
+        },
+      });
+
+      return tx.returnRequest.update({
+        where: { id },
+        data: {
+          status: ReturnRequestStatus.COMPLETED,
+          responseNotes: trimmedNotes || null,
+          respondedAt: new Date(),
+          completedAt: new Date(),
+        },
+        include: {
+          allocation: {
+            include: {
+              asset: true,
+              user: {
+                select: { id: true, email: true, fullName: true },
+              },
+              returnRecord: true,
             },
           },
         },
-      },
+      });
     });
 
     await createNotification(
       returnRequest.userId,
-      'Return Confirmation Logged',
-      `You confirmed return of <strong>${returnRequest.allocation.quantity}x "${returnRequest.allocation.asset.name}"</strong>. Please bring it to the council desk for final admin check-in.`,
+      'Asset Return Completed',
+      `Your return of <strong>${returnRequest.allocation.quantity}x "${returnRequest.allocation.asset.name}"</strong> has been completed and the inventory has been updated.`,
       'RETURN_REQUEST',
-      { label: 'CONFIRMED', color: '#10b981' }
+      { label: 'RETURNED', color: '#10b981' }
     );
 
     await notifyAdmins(
-      'User Confirmed Return',
-      `<strong>${returnRequest.allocation.user.fullName}</strong> confirmed they are ready to return <strong>${returnRequest.allocation.quantity}x "${returnRequest.allocation.asset.name}"</strong>.<br/><br/>User notes: <em>${trimmedNotes || 'No additional notes provided.'}</em><br/><br/>Complete the final check-in from Active Outstanding Loans.`,
+      'Asset Returned by User',
+      `<strong>${returnRequest.allocation.user.fullName}</strong> returned <strong>${returnRequest.allocation.quantity}x "${returnRequest.allocation.asset.name}"</strong>. Inventory has been updated automatically.<br/><br/>User notes: <em>${trimmedNotes || 'No additional notes provided.'}</em>`,
       'RETURN_REQUEST',
-      { label: 'READY FOR CHECK-IN', color: '#10b981' }
+      { label: 'RETURNED', color: '#10b981' }
     );
 
     await logAudit(
       userId,
-      'RETURN_REQUEST_CONFIRMED',
-      `Return request ${id} confirmed for allocation ${returnRequest.allocationId}`
+      'ASSET_RETURN',
+      `Return request ${id} completed for allocation ${returnRequest.allocationId}`
     );
 
-    res.json(updatedRequest);
+    res.json(completedRequest);
   } catch (error: any) {
     console.error('Error responding to return request:', error);
     if (error?.code === 'P2021') {

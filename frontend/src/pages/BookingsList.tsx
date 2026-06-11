@@ -74,7 +74,7 @@ const BookingsList: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({ responseNotes }),
       });
-      setNotice('Return confirmed. Please bring the item to the council desk for final check-in.');
+      setNotice('Return completed. Inventory has been updated and this item is now marked returned.');
       await fetchBookings();
     } catch (err: any) {
       setNotice(err.message || 'Return confirmation failed. Please try again.');
