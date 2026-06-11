@@ -53,28 +53,40 @@ const AdminDashboard: React.FC = () => {
       if (showSpinner) {
         setLoading(true);
       }
-      const [bookingsData, assetsData, allocationsData, healthData, auditData] = await Promise.all([
+      const [bookingsData, assetsData, allocationsData] = await Promise.all([
         apiFetch('/api/v1/bookings'),
         apiFetch('/api/v1/assets'),
         apiFetch('/api/v1/allocations'),
-        apiFetch('/api/v1/allocations/health'),
-        apiFetch('/api/v1/audit'),
       ]);
 
       let returnRequestsData: any[] = [];
+      let healthData: any[] = [];
+      let auditData: any[] = [];
       try {
         const data = await apiFetch('/api/v1/allocations/return-requests');
         returnRequestsData = Array.isArray(data) ? data : [];
       } catch (err) {
         console.warn('Return request log is unavailable; continuing with core admin data.', err);
       }
+      try {
+        const data = await apiFetch('/api/v1/allocations/health');
+        healthData = Array.isArray(data) ? data : [];
+      } catch (err) {
+        console.warn('Health reports are unavailable; continuing with core admin data.', err);
+      }
+      try {
+        const data = await apiFetch('/api/v1/audit');
+        auditData = Array.isArray(data) ? data : [];
+      } catch (err) {
+        console.warn('Audit logs are unavailable; continuing with core admin data.', err);
+      }
 
       setBookings(Array.isArray(bookingsData) ? bookingsData : []);
       setAssets(Array.isArray(assetsData) ? assetsData : []);
       setAllocations(Array.isArray(allocationsData) ? allocationsData : []);
       setReturnRequests(returnRequestsData);
-      setHealthReports(Array.isArray(healthData) ? healthData : []);
-      setAuditLogs(Array.isArray(auditData) ? auditData : []);
+      setHealthReports(healthData);
+      setAuditLogs(auditData);
     } catch (err) {
       console.error('Failed to sync administrative dashboard datasets', err);
       setBookings([]);
