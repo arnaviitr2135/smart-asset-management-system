@@ -47,6 +47,18 @@ enum Condition {
   DAMAGED
 }
 
+enum ReturnRequestStatus {
+  PENDING
+  USER_CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReturnRequestSource {
+  USER
+  ADMIN
+}
+
 model User {
   id                  String              @id @default(uuid())
   email               String              @unique
@@ -62,6 +74,8 @@ model User {
   auditLogs           AuditLog[]
   notifications       Notification[]
   passwordResetTokens PasswordResetToken[]
+  returnRequests      ReturnRequest[]     @relation("UserReturnRequests")
+  createdReturnRequests ReturnRequest[]   @relation("ReturnRequestsCreated")
 }
 
 model Asset {
@@ -110,6 +124,7 @@ model Allocation {
   issuedAt      DateTime          @default(now())
   returnRecord  Return?
   healthReports AssetHealthReport[]
+  returnRequests ReturnRequest[]
 }
 
 model Return {
@@ -154,6 +169,27 @@ model Notification {
   type      String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model ReturnRequest {
+  id            String              @id @default(uuid())
+  allocationId  String
+  allocation    Allocation          @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User                @relation("UserReturnRequests", fields: [userId], references: [id], onDelete: Cascade)
+  requestedById String
+  requestedBy   User                @relation("ReturnRequestsCreated", fields: [requestedById], references: [id])
+  source        ReturnRequestSource
+  status        ReturnRequestStatus @default(PENDING)
+  notes         String?
+  responseNotes String?
+  createdAt     DateTime            @default(now())
+  respondedAt   DateTime?
+  completedAt   DateTime?
+
+  @@index([allocationId])
+  @@index([userId])
+  @@index([status])
 }
 
 model PasswordResetToken {

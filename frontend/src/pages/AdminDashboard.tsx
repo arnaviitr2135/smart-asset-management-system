@@ -14,6 +14,7 @@ const AdminDashboard: React.FC = () => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
   const [allocations, setAllocations] = useState<any[]>([]);
+  const [returnRequests, setReturnRequests] = useState<any[]>([]);
   const [healthReports, setHealthReports] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,10 +53,11 @@ const AdminDashboard: React.FC = () => {
       if (showSpinner) {
         setLoading(true);
       }
-      const [bookingsData, assetsData, allocationsData, healthData, auditData] = await Promise.all([
+      const [bookingsData, assetsData, allocationsData, returnRequestsData, healthData, auditData] = await Promise.all([
         apiFetch('/api/v1/bookings'),
         apiFetch('/api/v1/assets'),
         apiFetch('/api/v1/allocations'),
+        apiFetch('/api/v1/allocations/return-requests'),
         apiFetch('/api/v1/allocations/health'),
         apiFetch('/api/v1/audit'),
       ]);
@@ -63,6 +65,7 @@ const AdminDashboard: React.FC = () => {
       setBookings(Array.isArray(bookingsData) ? bookingsData : []);
       setAssets(Array.isArray(assetsData) ? assetsData : []);
       setAllocations(Array.isArray(allocationsData) ? allocationsData : []);
+      setReturnRequests(Array.isArray(returnRequestsData) ? returnRequestsData : []);
       setHealthReports(Array.isArray(healthData) ? healthData : []);
       setAuditLogs(Array.isArray(auditData) ? auditData : []);
     } catch (err) {
@@ -70,6 +73,7 @@ const AdminDashboard: React.FC = () => {
       setBookings([]);
       setAssets([]);
       setAllocations([]);
+      setReturnRequests([]);
       setHealthReports([]);
       setAuditLogs([]);
     } finally {
@@ -120,6 +124,24 @@ const AdminDashboard: React.FC = () => {
       void refreshAllData(false);
     } catch (err: any) {
       alert(err.message || 'Failed to issue asset');
+    }
+  };
+
+  const handleRequestReturnFromUser = async (allocation: any) => {
+    const notes = window.prompt(`Send return request to ${allocation.user.fullName}? Add optional notes for the user.`);
+    if (notes === null) return;
+
+    try {
+      await apiFetch('/api/v1/allocations/request-return', {
+        method: 'POST',
+        body: JSON.stringify({
+          allocationId: allocation.id,
+          notes,
+        }),
+      });
+      void refreshAllData(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to send return request');
     }
   };
 
@@ -609,6 +631,10 @@ const AdminDashboard: React.FC = () => {
                     <div className="space-y-2">
                       {allocations.filter(a => a.status === 'ISSUED').map(allocation => {
                         const isOverdue = new Date(allocation.dueDate) < new Date();
+                        const activeReturnRequest = returnRequests.find(request =>
+                          request.allocationId === allocation.id &&
+                          ['PENDING', 'USER_CONFIRMED'].includes(request.status)
+                        );
                         return (
                           <div 
                             key={allocation.id}
@@ -629,19 +655,81 @@ const AdminDashboard: React.FC = () => {
                                 Due: {new Date(allocation.dueDate).toLocaleDateString()}
                               </span>
                             </div>
-                            <button
-                              onClick={() => {
-                                setSelectedAllocationForReturn(allocation);
-                                setReturnCondition('GOOD');
-                              }}
-                              className="px-2.5 py-1 rounded bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 border border-brand-500/20 font-semibold shrink-0"
-                            >
-                              Check-in / Return
-                            </button>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                onClick={() => handleRequestReturnFromUser(allocation)}
+                                disabled={!!activeReturnRequest}
+                                className="px-2.5 py-1 rounded bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/20 font-semibold shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {activeReturnRequest ? 'Request Sent' : 'Request Return'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedAllocationForReturn(allocation);
+                                  setReturnCondition('GOOD');
+                                }}
+                                className="px-2.5 py-1 rounded bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 border border-brand-500/20 font-semibold shrink-0"
+                              >
+                                Check-in / Return
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
                     </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="glass-panel p-5 rounded-2xl border border-dark-850">
+                <h3 className="font-bold text-sm text-dark-200 mb-4">Return Request Log</h3>
+
+                {returnRequests.filter(request => request.status !== 'COMPLETED').length === 0 ? (
+                  <p className="text-xs text-dark-400 text-center py-6">No active return requests.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {returnRequests
+                      .filter(request => request.status !== 'COMPLETED')
+                      .map(request => (
+                        <div key={request.id} className="rounded-xl border border-dark-850 bg-dark-900/30 p-3 text-xs">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <span className="font-bold text-dark-100 block">{request.allocation.asset.name}</span>
+                              <div className="mt-1 text-[10px] text-dark-400 space-x-2">
+                                <span>Qty: {request.allocation.quantity}</span>
+                                <span>&bull;</span>
+                                <span>User: {request.allocation.user.fullName}</span>
+                              </div>
+                              <p className="mt-1 text-dark-400">
+                                {request.source === 'ADMIN' ? 'Admin requested return' : 'User requested return'}
+                                {request.requestedBy?.fullName ? ` by ${request.requestedBy.fullName}` : ''}
+                              </p>
+                              {request.notes && <p className="mt-1 text-dark-300">Notes: {request.notes}</p>}
+                              {request.responseNotes && <p className="mt-1 text-emerald-300">User response: {request.responseNotes}</p>}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`rounded-lg border px-2.5 py-1 font-bold ${
+                                request.status === 'USER_CONFIRMED'
+                                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                  : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+                              }`}>
+                                {request.status === 'USER_CONFIRMED' ? 'User ready' : 'Pending user'}
+                              </span>
+                              {request.allocation.status === 'ISSUED' && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedAllocationForReturn(request.allocation);
+                                    setReturnCondition('GOOD');
+                                  }}
+                                  className="px-2.5 py-1 rounded bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 border border-brand-500/20 font-semibold"
+                                >
+                                  Check-in
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 )}
               </div>

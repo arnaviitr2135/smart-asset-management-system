@@ -1,5 +1,13 @@
 import { Response } from 'express';
-import { PrismaClient, BookingStatus, AllocationStatus, AssetStatus, Condition } from '@prisma/client';
+import {
+  PrismaClient,
+  BookingStatus,
+  AllocationStatus,
+  AssetStatus,
+  Condition,
+  ReturnRequestSource,
+  ReturnRequestStatus,
+} from '@prisma/client';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { createNotification, notifyAdmins, logAudit } from '../services/notification.service';
 
@@ -421,6 +429,19 @@ export async function returnAsset(req: AuthenticatedRequest, res: Response) {
         data: { status: AllocationStatus.RETURNED },
       });
 
+      await tx.returnRequest.updateMany({
+        where: {
+          allocationId,
+          status: {
+            in: [ReturnRequestStatus.PENDING, ReturnRequestStatus.USER_CONFIRMED],
+          },
+        },
+        data: {
+          status: ReturnRequestStatus.COMPLETED,
+          completedAt: new Date(),
+        },
+      });
+
       // 5. If damaged, write a Health Report automatically
       if (conditionOnReturn === Condition.DAMAGED) {
         await tx.assetHealthReport.create({
@@ -497,35 +518,196 @@ export async function requestReturnAsset(req: AuthenticatedRequest, res: Respons
     const trimmedNotes = typeof notes === 'string' ? notes.trim() : '';
     const dueDate = allocation.dueDate.toLocaleDateString();
     const returnNotes = trimmedNotes || 'No additional notes provided.';
+    const source = role === 'ADMIN' ? ReturnRequestSource.ADMIN : ReturnRequestSource.USER;
 
-    await createNotification(
-      allocation.userId,
-      'Return Request Submitted',
-      `Your return request for <strong>${allocation.quantity}x "${allocation.asset.name}"</strong> has been sent to the council desk. Please bring the item to an admin for check-in verification.`,
-      'RETURN_REQUEST',
-      { label: 'RETURN REQUESTED', color: '#0ea5e9' }
-    );
+    const existingRequest = await prisma.returnRequest.findFirst({
+      where: {
+        allocationId,
+        status: {
+          in: [ReturnRequestStatus.PENDING, ReturnRequestStatus.USER_CONFIRMED],
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    await notifyAdmins(
-      'Return Requested',
-      `<strong>${allocation.user.fullName}</strong> (${allocation.user.email}) wants to return <strong>${allocation.quantity}x "${allocation.asset.name}"</strong>.<br/><br/>Due date: <strong>${dueDate}</strong><br/>User notes: <em>${returnNotes}</em><br/><br/>Please verify the item condition and complete the return from the Admin Desk.`,
-      'RETURN_REQUEST',
-      { label: 'CHECK-IN NEEDED', color: '#0ea5e9' }
-    );
+    if (existingRequest) {
+      return res.status(400).json({ error: 'There is already an active return request for this asset' });
+    }
+
+    const returnRequest = await prisma.returnRequest.create({
+      data: {
+        allocationId,
+        userId: allocation.userId,
+        requestedById: userId,
+        source,
+        notes: trimmedNotes || null,
+      },
+    });
+
+    if (source === ReturnRequestSource.ADMIN) {
+      await createNotification(
+        allocation.userId,
+        'Admin Requested Asset Return',
+        `The council desk requested return of <strong>${allocation.quantity}x "${allocation.asset.name}"</strong>. Open Bookings & Loans and confirm from the Return Request Log when you are ready to return it.`,
+        'RETURN_REQUEST',
+        { label: 'RETURN NEEDED', color: '#f59e0b' }
+      );
+
+      await notifyAdmins(
+        'Return Request Sent to User',
+        `Admin <strong>${req.user!.email}</strong> requested <strong>${allocation.user.fullName}</strong> (${allocation.user.email}) to return <strong>${allocation.quantity}x "${allocation.asset.name}"</strong>.<br/><br/>Due date: <strong>${dueDate}</strong><br/>Admin notes: <em>${returnNotes}</em>`,
+        'RETURN_REQUEST',
+        { label: 'REQUEST SENT', color: '#f59e0b' }
+      );
+    } else {
+      await createNotification(
+        allocation.userId,
+        'Return Request Submitted',
+        `Your return request for <strong>${allocation.quantity}x "${allocation.asset.name}"</strong> has been sent to the council desk. Please bring the item to an admin for check-in verification.`,
+        'RETURN_REQUEST',
+        { label: 'RETURN REQUESTED', color: '#0ea5e9' }
+      );
+
+      await notifyAdmins(
+        'Return Requested by User',
+        `<strong>${allocation.user.fullName}</strong> (${allocation.user.email}) wants to return <strong>${allocation.quantity}x "${allocation.asset.name}"</strong>.<br/><br/>Due date: <strong>${dueDate}</strong><br/>User notes: <em>${returnNotes}</em><br/><br/>Please verify the item condition and complete the return from the Admin Desk.`,
+        'RETURN_REQUEST',
+        { label: 'CHECK-IN NEEDED', color: '#0ea5e9' }
+      );
+    }
 
     await logAudit(
       userId,
       'RETURN_REQUEST',
-      `Return requested for allocation ${allocationId}: ${allocation.quantity}x "${allocation.asset.name}"`
+      `${source} return request created for allocation ${allocationId}: ${allocation.quantity}x "${allocation.asset.name}"`
     );
 
     res.json({
       message: 'Return request sent to the admin desk.',
       allocationId,
+      returnRequest,
     });
   } catch (error: any) {
     console.error('Error requesting asset return:', error);
     res.status(400).json({ error: error.message || 'Return request failed' });
+  }
+}
+
+export async function getReturnRequests(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const role = req.user!.role;
+
+    const requests = await prisma.returnRequest.findMany({
+      where: role === 'ADMIN' ? {} : { userId },
+      include: {
+        allocation: {
+          include: {
+            asset: true,
+            user: {
+              select: { id: true, email: true, fullName: true },
+            },
+            booking: true,
+            returnRecord: true,
+          },
+        },
+        requestedBy: {
+          select: { id: true, email: true, fullName: true, role: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    res.json(requests);
+  } catch (error) {
+    console.error('Error fetching return requests:', error);
+    res.status(500).json({ error: 'Failed to fetch return requests' });
+  }
+}
+
+export async function respondToReturnRequest(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { responseNotes } = req.body;
+    const userId = req.user!.id;
+    const role = req.user!.role;
+
+    const returnRequest = await prisma.returnRequest.findUnique({
+      where: { id },
+      include: {
+        allocation: {
+          include: {
+            asset: true,
+            user: {
+              select: { id: true, email: true, fullName: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!returnRequest) {
+      return res.status(404).json({ error: 'Return request not found' });
+    }
+
+    if (role !== 'ADMIN' && returnRequest.userId !== userId) {
+      return res.status(403).json({ error: 'You can only respond to your own return requests' });
+    }
+
+    if (returnRequest.status !== ReturnRequestStatus.PENDING) {
+      return res.status(400).json({ error: 'This return request is no longer pending' });
+    }
+
+    if (returnRequest.allocation.status !== AllocationStatus.ISSUED) {
+      return res.status(400).json({ error: 'This asset is not currently issued' });
+    }
+
+    const trimmedNotes = typeof responseNotes === 'string' ? responseNotes.trim() : '';
+    const updatedRequest = await prisma.returnRequest.update({
+      where: { id },
+      data: {
+        status: ReturnRequestStatus.USER_CONFIRMED,
+        responseNotes: trimmedNotes || null,
+        respondedAt: new Date(),
+      },
+      include: {
+        allocation: {
+          include: {
+            asset: true,
+            user: {
+              select: { id: true, email: true, fullName: true },
+            },
+          },
+        },
+      },
+    });
+
+    await createNotification(
+      returnRequest.userId,
+      'Return Confirmation Logged',
+      `You confirmed return of <strong>${returnRequest.allocation.quantity}x "${returnRequest.allocation.asset.name}"</strong>. Please bring it to the council desk for final admin check-in.`,
+      'RETURN_REQUEST',
+      { label: 'CONFIRMED', color: '#10b981' }
+    );
+
+    await notifyAdmins(
+      'User Confirmed Return',
+      `<strong>${returnRequest.allocation.user.fullName}</strong> confirmed they are ready to return <strong>${returnRequest.allocation.quantity}x "${returnRequest.allocation.asset.name}"</strong>.<br/><br/>User notes: <em>${trimmedNotes || 'No additional notes provided.'}</em><br/><br/>Complete the final check-in from Active Outstanding Loans.`,
+      'RETURN_REQUEST',
+      { label: 'READY FOR CHECK-IN', color: '#10b981' }
+    );
+
+    await logAudit(
+      userId,
+      'RETURN_REQUEST_CONFIRMED',
+      `Return request ${id} confirmed for allocation ${returnRequest.allocationId}`
+    );
+
+    res.json(updatedRequest);
+  } catch (error: any) {
+    console.error('Error responding to return request:', error);
+    res.status(400).json({ error: error.message || 'Return request response failed' });
   }
 }
 

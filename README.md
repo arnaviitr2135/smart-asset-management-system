@@ -26,6 +26,8 @@ The platform includes live inventory tracking, booking approvals, issue/return w
 - Admin approval and rejection workflow
 - Asset issue, return, and overdue allocation tracking
 - Member return request option with admin and user email notifications
+- Persisted return request log for both users and admins
+- Admin-initiated return requests that users can confirm before final check-in
 - QR-code based asset scan simulation
 - Asset health reports and damaged/maintenance state handling
 - In-app notifications
@@ -229,7 +231,7 @@ Backend deployment:
 - Current backend Dockerfile path is `backend/Dockerfile.render`.
 - Docker build context should be `backend`.
 - The backend starts with `node dist/index.js`.
-- Run Prisma schema sync separately when schema changes:
+- Run Prisma schema sync separately when schema changes. This is required after changes that add tables such as return requests:
 
 ```bash
 npx prisma db push
@@ -294,8 +296,9 @@ Member workflow:
 3. Select an asset, quantity, start date, end date, and purpose.
 4. Submit a booking request.
 5. Track booking status and notifications.
-6. Request return for issued assets when ready.
-7. Return issued assets at the council desk for admin check-in.
+6. Use the Return Request Log to confirm admin return requests.
+7. Use **Return Asset** on issued loans when ready to return.
+8. Return issued assets at the council desk for final admin check-in.
 
 Admin workflow:
 
@@ -304,8 +307,10 @@ Admin workflow:
 3. Review pending booking requests.
 4. Approve or reject requests.
 5. Issue approved assets.
-6. Mark returns and asset condition.
-7. Review health logs, audit logs, and analytics.
+6. Send return requests to users from the active borrowing log.
+7. Track user return confirmations in the Return Request Log.
+8. Mark returns and asset condition after physical check-in.
+9. Review health logs, audit logs, and analytics.
 
 ## Troubleshooting
 

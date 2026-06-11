@@ -5,19 +5,24 @@ import { Calendar, CheckCircle, Clock, XCircle, ArrowRight, CornerDownRight, Rot
 const BookingsList: React.FC = () => {
   const { apiFetch } = useAuth();
   const [bookings, setBookings] = useState<any[]>([]);
+  const [returnRequests, setReturnRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [returningIds, setReturningIds] = useState<Set<string>>(new Set());
-  const [returnRequestedIds, setReturnRequestedIds] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
 
   const fetchBookings = async () => {
     try {
       setLoading(true);
-      const data = await apiFetch('/api/v1/bookings');
-      setBookings(Array.isArray(data) ? data : []);
+      const [bookingsData, returnRequestsData] = await Promise.all([
+        apiFetch('/api/v1/bookings'),
+        apiFetch('/api/v1/allocations/return-requests'),
+      ]);
+      setBookings(Array.isArray(bookingsData) ? bookingsData : []);
+      setReturnRequests(Array.isArray(returnRequestsData) ? returnRequestsData : []);
     } catch (err) {
       console.error('Error fetching user bookings', err);
       setBookings([]);
+      setReturnRequests([]);
     } finally {
       setLoading(false);
     }
@@ -41,8 +46,8 @@ const BookingsList: React.FC = () => {
           notes,
         }),
       });
-      setReturnRequestedIds((current) => new Set(current).add(allocation.id));
       setNotice('Return request sent to the admin desk. Please bring the item for check-in verification.');
+      await fetchBookings();
     } catch (err: any) {
       setNotice(err.message || 'Return request failed. Please try again.');
     } finally {
@@ -53,6 +58,36 @@ const BookingsList: React.FC = () => {
       });
     }
   };
+
+  const handleConfirmReturnRequest = async (request: any) => {
+    const responseNotes = window.prompt('Confirm you are ready to return this item. Add notes for the admin desk, or leave blank.');
+    if (responseNotes === null) return;
+
+    try {
+      setNotice(null);
+      setReturningIds((current) => new Set(current).add(request.allocationId));
+      await apiFetch(`/api/v1/allocations/return-requests/${request.id}/respond`, {
+        method: 'POST',
+        body: JSON.stringify({ responseNotes }),
+      });
+      setNotice('Return confirmed. Please bring the item to the council desk for final check-in.');
+      await fetchBookings();
+    } catch (err: any) {
+      setNotice(err.message || 'Return confirmation failed. Please try again.');
+    } finally {
+      setReturningIds((current) => {
+        const next = new Set(current);
+        next.delete(request.allocationId);
+        return next;
+      });
+    }
+  };
+
+  const getActiveReturnRequest = (allocationId: string) =>
+    returnRequests.find((request) =>
+      request.allocationId === allocationId &&
+      ['PENDING', 'USER_CONFIRMED'].includes(request.status)
+    );
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -93,6 +128,58 @@ const BookingsList: React.FC = () => {
         </div>
       )}
 
+      {returnRequests.filter((request) => request.status !== 'COMPLETED').length > 0 && (
+        <div className="glass-panel rounded-2xl border border-dark-850 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-dark-100">Return Request Log</h3>
+              <p className="text-xs text-dark-400">Confirm admin return requests or track your own return requests.</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {returnRequests
+              .filter((request) => request.status !== 'COMPLETED')
+              .map((request) => {
+                const isAdminRequest = request.source === 'ADMIN';
+                const canConfirm = request.status === 'PENDING';
+                const isSending = returningIds.has(request.allocationId);
+
+                return (
+                  <div key={request.id} className="flex flex-col gap-3 rounded-xl border border-dark-800 bg-dark-900/30 p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <span className="font-bold text-dark-100">{request.allocation.asset.name}</span>
+                      <p className="mt-1 text-dark-400">
+                        {isAdminRequest ? 'Admin requested this return' : 'You requested this return'} - Qty {request.allocation.quantity} - Due {new Date(request.allocation.dueDate).toLocaleDateString()}
+                      </p>
+                      {request.notes && <p className="mt-1 text-dark-300">Notes: {request.notes}</p>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-lg border px-2.5 py-1 font-bold ${
+                        request.status === 'USER_CONFIRMED'
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                          : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+                      }`}>
+                        {request.status === 'USER_CONFIRMED' ? 'Ready for check-in' : 'Pending confirmation'}
+                      </span>
+                      {canConfirm && (
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmReturnRequest(request)}
+                          disabled={isSending}
+                          className="inline-flex items-center gap-2 rounded-lg border border-brand-500/30 bg-brand-500/10 px-3 py-2 font-bold text-brand-100 hover:bg-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          {isSending ? 'Confirming...' : 'Confirm Return'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="py-20 flex justify-center">
           <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
@@ -109,8 +196,11 @@ const BookingsList: React.FC = () => {
             const isReturned = booking.allocation?.status === 'RETURNED';
             const isOverdue = booking.allocation?.status === 'OVERDUE' || 
               (booking.allocation?.status === 'ISSUED' && new Date(booking.allocation.dueDate) < new Date());
-            const canRequestReturn = booking.allocation?.status === 'ISSUED' && !returnRequestedIds.has(booking.allocation.id);
-            const returnRequestSent = booking.allocation && returnRequestedIds.has(booking.allocation.id);
+            const activeReturnRequest = booking.allocation ? getActiveReturnRequest(booking.allocation.id) : null;
+            const returnRequestSent = !!activeReturnRequest;
+            const canRequestReturn = booking.allocation?.status === 'ISSUED' && !activeReturnRequest;
+            const canConfirmReturn = activeReturnRequest?.status === 'PENDING';
+            const returnConfirmed = activeReturnRequest?.status === 'USER_CONFIRMED';
             const isRequestingReturn = booking.allocation && returningIds.has(booking.allocation.id);
 
             return (
@@ -221,16 +311,22 @@ const BookingsList: React.FC = () => {
                       {!isReturned && (
                         <button
                           type="button"
-                          onClick={() => handleRequestReturn(booking.allocation)}
-                          disabled={!canRequestReturn || !!isRequestingReturn}
+                          onClick={() => activeReturnRequest ? handleConfirmReturnRequest(activeReturnRequest) : handleRequestReturn(booking.allocation)}
+                          disabled={(!canRequestReturn && !canConfirmReturn) || !!isRequestingReturn}
                           className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
-                            returnRequestSent
+                            returnConfirmed
                               ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
                               : 'border border-brand-500/30 bg-brand-500/10 text-brand-100 hover:bg-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60'
                           }`}
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
-                          {returnRequestSent ? 'Return Requested' : isRequestingReturn ? 'Sending...' : 'Request Return'}
+                          {isRequestingReturn
+                            ? 'Sending...'
+                            : returnConfirmed
+                            ? 'Return Confirmed'
+                            : returnRequestSent
+                            ? 'Confirm Return'
+                            : 'Return Asset'}
                         </button>
                       )}
                     </div>
